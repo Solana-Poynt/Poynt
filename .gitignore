@@ -11,6 +11,10 @@ npm-debug.*
 web-build/
 # expo router
 expo-env.d.ts
+**/.env
+
+.env
+app.json
 
 
 
