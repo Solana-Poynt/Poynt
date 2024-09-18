@@ -111,7 +111,6 @@ export default function Map() {
   const handleCancel = () => {
     setSelectedPlace(null);
     setShowPlaceDetails(false);
-    
 
     cameraRef.current?.setCamera({
       centerCoordinate: userLocation,
@@ -132,7 +131,7 @@ export default function Map() {
     <View style={styles.container}>
       <MapView
         style={{ flex: 1 }}
-        // ref={mapRef}
+        ref={mapRef}
         compassEnabled
         compassPosition={{ bottom: 90, left: 8 }}
         scaleBarEnabled={false}
