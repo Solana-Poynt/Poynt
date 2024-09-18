@@ -4,9 +4,9 @@ import Mapbox, {
   LocationPuck,
   locationManager,
   MapView,
-  UserLocation,
-  PointAnnotation,
-  MarkerView,
+  ShapeSource,
+  SymbolLayer,
+  Images,
 } from '@rnmapbox/maps';
 import { useState, useRef, useEffect } from 'react';
 import {
@@ -19,17 +19,52 @@ import {
   StatusBar,
 } from 'react-native';
 import { requestLocationPermission } from '~/utils/Permissions';
-import SearchBarWithSuggestions from './SearchBar';
+import MapboxSearch from './SearchBar';
+import SelectedPlace from './SelectedPlace';
+import Center from './Center';
+import ViewPlace from './ViewPlace';
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
+// [number, number] | number[]
+
+interface Place {
+  id: string;
+  name: string;
+  coordinates: [number, number] | number[];
+  distance?: number;
+}
 
 export default function Map() {
   const [isMapReady, setIsMapReady] = useState<boolean>(false);
   const [hasMapError, setHasMapError] = useState<boolean>(false);
-  const [userLocation, setUserLocation] = useState<[number, number] | any>(null);
+  const [userLocation, setUserLocation] = useState<[number, number] | number[]>();
   const [hasLocationPermission, setHasLocationPermission] = useState<boolean | undefined>(false);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+
   const mapRef = useRef<MapView>(null);
   const cameraRef = useRef<Camera>(null);
+
+  const [showPlaceDetails, setShowPlaceDetails] = useState<boolean>(false);
+
+  const handlePlaceSelect = (place: Place) => {
+    setSelectedPlace(place);
+    setShowPlaceDetails(true);
+    if (cameraRef.current) {
+      cameraRef.current.setCamera({
+        centerCoordinate: place.coordinates,
+        zoomLevel: 17,
+        animationDuration: 3000,
+      });
+    }
+  };
+
+  const handleCenterSelect = (location: [number, number] | number[]) => {
+    cameraRef.current?.setCamera({
+      centerCoordinate: location,
+      zoomLevel: 14,
+      animationDuration: 2000,
+    });
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -66,26 +101,25 @@ export default function Map() {
     checkPermissionsAndGetLocation();
   }, []);
 
- 
   const onMapError = () => setHasMapError(true);
   const onMapLoad = () => setIsMapReady(true);
-
-
-  const centerOnUser = () => {
-    if (userLocation && cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: userLocation,
-        zoomLevel: 14,
-        animationDuration: 1000,
-      });
-    }
-  };
-
-
 
   const onUserLocationUpdate = (location: any) => {
     setUserLocation([location.coords.longitude, location.coords.latitude]);
   };
+
+  const handleCancel = () => {
+    setSelectedPlace(null);
+    setShowPlaceDetails(false);
+    
+
+    cameraRef.current?.setCamera({
+      centerCoordinate: userLocation,
+      zoomLevel: 14,
+      animationDuration: 2000,
+    });
+  };
+
   if (hasMapError) {
     return (
       <View style={styles.errorContainer}>
@@ -95,63 +129,41 @@ export default function Map() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar translucent backgroundColor="transparent" />
-      <SearchBarWithSuggestions/>
-      {userLocation ? (
-        <View style={styles.container}>
-          {/* loading should load the home banner  */}
-          {/* {!isMapReady && (
-        // <View style={styles.loadingContainer}>
-        // </View>
-      )} */}
+    <View style={styles.container}>
+      <MapView
+        style={{ flex: 1 }}
+        // ref={mapRef}
+        compassEnabled
+        compassPosition={{ bottom: 90, left: 8 }}
+        scaleBarEnabled={false}
+        onDidFinishLoadingMap={onMapLoad}
+        onMapLoadingError={onMapError}>
+        <Camera
+          centerCoordinate={userLocation}
+          ref={cameraRef}
+          zoomLevel={14}
+          followZoomLevel={14}
+          animationMode="flyTo"
+          animationDuration={2000}
+          followUserLocation
+        />
 
-          <MapView
-            ref={mapRef}
-            compassEnabled
-            compassPosition={{ bottom: 90, left: 8 }}
-            rotateEnabled={true}
-            style={styles.map}
-            zoomEnabled={true}
-            scaleBarEnabled={false}
-            onDidFinishLoadingMap={onMapLoad}
-            onMapLoadingError={onMapError}
-            attributionEnabled={false}>
-            <Camera
-              ref={cameraRef}
-              zoomLevel={15}
-              followZoomLevel={14}
-              animationMode="flyTo"
-              animationDuration={6000}
-              followUserLocation={hasLocationPermission}
-            />
+        <SelectedPlace selectedPlace={selectedPlace} onPlaceSelect={handlePlaceSelect} />
 
-            {/* <UserLocation
-            androidRenderMode={'gps'}
-            visible
-            showsUserHeadingIndicator={true}
-            onUpdate={onUserLocationUpdate}
-          /> */}
+        {hasLocationPermission && (
+          <LocationPuck puckBearing="heading" puckBearingEnabled pulsing={{ isEnabled: true }} />
+        )}
+      </MapView>
 
-            {hasLocationPermission && (
-              <LocationPuck
-                puckBearing="heading"
-                puckBearingEnabled
-                pulsing={{ isEnabled: true }}
-              />
-            )}
-          </MapView>
+      {userLocation && <Center userLocation={userLocation} onCenterSelect={handleCenterSelect} />}
 
-          {hasLocationPermission && (
-            <TouchableOpacity style={styles.centerButton} onPress={centerOnUser}>
-              <Text style={styles.buttonText}>Center on Me</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : (
-        <Text>Unable to load map. Please check your location settings.</Text>
+      {userLocation && (
+        <MapboxSearch userLocation={userLocation} onPlaceSelect={handlePlaceSelect} />
       )}
-    </SafeAreaView>
+      {showPlaceDetails && selectedPlace && (
+        <ViewPlace selectedPlace={selectedPlace} handleCancel={handleCancel} />
+      )}
+    </View>
   );
 }
 
@@ -169,12 +181,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
   },
-  mapContainer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
-  },
+
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -216,4 +223,69 @@ const styles = StyleSheet.create({
   searchBarText: {
     color: '#999',
   },
+  placeDetailsContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 5,
+  },
+  placeName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  placeDistance: {
+    fontSize: 14,
+    color: 'gray',
+    marginBottom: 10,
+  },
+  placeDescription: {
+    fontSize: 14,
+  },
+  cancelButton: {
+    backgroundColor: '#ff6b6b',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
 });
+
+// {selectedPlace && (
+//   <ShapeSource
+//     id="selected-place"
+//     shape={{
+//       type: 'FeatureCollection',
+//       features: [
+//         {
+//           type: 'Feature',
+//           geometry: {
+//             type: 'Point',
+//             coordinates: selectedPlace.coordinates,
+//           },
+//           properties: {
+//             name: selectedPlace.name,
+//           },
+//         },
+//       ],
+//     }}>
+//     <SymbolLayer
+//       id="selected-place-icon"
+//       style={{
+//         iconImage: 'pin',
+//         iconSize: 0.2,
+//         iconAllowOverlap: false,
+//         iconAnchor: 'bottom',
+//       }}
+//     />
+//     <Images images={{ pin: require('../assets/pin.png') }} />
+//   </ShapeSource>
+// )}
