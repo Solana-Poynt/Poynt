@@ -53,7 +53,7 @@ function LoginScreen() {
         </View>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Login'} color={'Dark'} link={'/screens/recover'} />
+          <AppButton title={'Login'} color={'Dark'} link={'/screens/home'} />
           <AppButton
             title={'Login with Google'}
             color={'Light'}

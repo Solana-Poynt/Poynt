@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "poynt",
+    "slug": "poynt",
+    "version": "1.0.0",
+    "scheme": "poynt",
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/splash.png"
+    },
+
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "Add the SK from env",
+          "RNMapboxMapsVersion": "11.0.0"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "tsconfigPaths": true
+    },
+    "orientation": "portrait",
+    "icon": "./assets/splash.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/poynt.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/poynt.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.alphar33.poynt"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "d3e67609-29bc-4494-8305-f615bb0191a2"
+      }
+    },
+    "assets": ["./assets/poynt.png"]
+  }
+}
