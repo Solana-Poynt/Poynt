@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
+import BottomNav from '~/components/BottomNav';
 // import AppLoading from 'expo-app-loading';
 
 export default function Layout() {
@@ -16,6 +17,7 @@ export default function Layout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Stack />
+      {/* <BottomNav /> */}
     </GestureHandlerRootView>
   );
 }

@@ -22,7 +22,7 @@
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsDownloadToken": "Add the SK from env",
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiYWxwaGFyIiwiYSI6ImNtMHZncmNpdjByMW8ya3FzcnJuazNiNmwifQ.2gHQ9mH6wKjRdGJeotJ14Q",
           "RNMapboxMapsVersion": "11.0.0"
         }
       ]

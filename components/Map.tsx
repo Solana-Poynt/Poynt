@@ -17,16 +17,21 @@ import {
   SafeAreaView,
   ActivityIndicator,
   StatusBar,
+  Button,
 } from 'react-native';
 import { requestLocationPermission } from '~/utils/Permissions';
 import MapboxSearch from './SearchBar';
 import SelectedPlace from './SelectedPlace';
-import Center from './Center';
 import ViewPlace from './ViewPlace';
+import useLocation from '~/hooks/useLocation';
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
 // [number, number] | number[]
 
+interface Location {
+  latitude: number;
+  longitude: number;
+}
 interface Place {
   id: string;
   name: string;
@@ -38,13 +43,20 @@ export default function Map() {
   const [isMapReady, setIsMapReady] = useState<boolean>(false);
   const [hasMapError, setHasMapError] = useState<boolean>(false);
   const [userLocation, setUserLocation] = useState<[number, number] | number[]>();
-  const [hasLocationPermission, setHasLocationPermission] = useState<boolean | undefined>(false);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+
+  const { location, hasLocationPermission } = useLocation();
 
   const mapRef = useRef<MapView>(null);
   const cameraRef = useRef<Camera>(null);
 
   const [showPlaceDetails, setShowPlaceDetails] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (hasLocationPermission && location) {
+      setUserLocation(location);
+    }
+  }, [location, hasLocationPermission]);
 
   const handlePlaceSelect = (place: Place) => {
     setSelectedPlace(place);
@@ -52,7 +64,7 @@ export default function Map() {
     if (cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: place.coordinates,
-        zoomLevel: 17,
+        zoomLevel: 15,
         animationDuration: 3000,
       });
     }
@@ -66,47 +78,8 @@ export default function Map() {
     });
   };
 
-  const getCurrentLocation = async () => {
-    try {
-      const location = await locationManager.getLastKnownLocation();
-      if (location) {
-        setUserLocation([location.coords.longitude, location.coords.latitude]);
-      }
-    } catch (error) {
-      console.error('Error fetching location:', error);
-      Alert.alert('Error', 'Could not retrieve current location.');
-    }
-  };
-
-  useEffect(() => {
-    const checkPermissionsAndGetLocation = async () => {
-      try {
-        const permissionGranted = await requestLocationPermission();
-        setHasLocationPermission(permissionGranted);
-
-        if (permissionGranted) {
-          await getCurrentLocation();
-        } else {
-          Alert.alert(
-            'Permission Denied',
-            'You need to grant location permissions to use all features of this app.',
-            [{ text: 'OK' }]
-          );
-        }
-      } catch (error) {
-        console.error('Error in checkPermissionsAndGetLocation:', error);
-      }
-    };
-
-    checkPermissionsAndGetLocation();
-  }, []);
-
   const onMapError = () => setHasMapError(true);
   const onMapLoad = () => setIsMapReady(true);
-
-  const onUserLocationUpdate = (location: any) => {
-    setUserLocation([location.coords.longitude, location.coords.latitude]);
-  };
 
   const handleCancel = () => {
     setSelectedPlace(null);
@@ -133,7 +106,7 @@ export default function Map() {
         style={{ flex: 1 }}
         ref={mapRef}
         compassEnabled
-        compassPosition={{ bottom: 90, left: 8 }}
+        compassPosition={{ bottom: 191, left: 14 }}
         scaleBarEnabled={false}
         onDidFinishLoadingMap={onMapLoad}
         onMapLoadingError={onMapError}>
@@ -154,7 +127,7 @@ export default function Map() {
         )}
       </MapView>
 
-      {userLocation && <Center userLocation={userLocation} onCenterSelect={handleCenterSelect} />}
+      {/* {userLocation && <Center userLocation={userLocation} onCenterSelect={handleCenterSelect} />} */}
 
       {userLocation && (
         <MapboxSearch userLocation={userLocation} onPlaceSelect={handlePlaceSelect} />
