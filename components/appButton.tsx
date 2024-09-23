@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, Image } from 'react-native';
 import { IButton } from '~/app/interfaces/interfaces';
 
-export default function AppButton({ title, color, link, image }: IButton) {
+export default function AppButton({ title, color, link, handleClick, image }: IButton) {
   const router = useRouter();
 
   return (
@@ -12,7 +12,9 @@ export default function AppButton({ title, color, link, image }: IButton) {
         styles.button,
         color === 'Dark' ? { backgroundColor: '#B71C1C' } : { backgroundColor: '#EDEDED' },
       ]}
-      onPress={() => router.push({ pathname: link ? link : '/' })}>
+      onPress={() =>
+        link ? router.push({ pathname: link ? link : '/' }) : handleClick ? handleClick() : ''
+      }>
       {image && (
         <Image
           source={image === 'google' ? require('../assets/google.png') : ''}

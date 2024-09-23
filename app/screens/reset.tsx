@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   View,
@@ -14,9 +14,69 @@ import { Stack, useRouter } from 'expo-router';
 import BackButton from '~/components/backButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '~/components/appButton';
+import { useLocalSearchParams } from 'expo-router';
+import { useSendDataMutation } from '~/store/api/api';
+import { areValuesEmpty, validateRegistration } from '~/utils/util';
+import Notification from '../../components/Notification';
 
 function ResetScreen() {
   const router = useRouter();
+  const { email, OTP } = useLocalSearchParams();
+  const [userData, setUserData] = useState({
+    email: email,
+    OTP: OTP,
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [notification, setNotification] = useState({
+    message: '',
+    status: '',
+    show: false,
+  });
+
+  const [userAuth, { isLoading, reset }] = useSendDataMutation();
+  async function resetPassword() {
+    const isDataEmpty = areValuesEmpty(userData);
+    if (isDataEmpty) {
+      setNotification({
+        message: 'Empty Fields',
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const validationResult = validateRegistration(
+      userData.email,
+      userData.newPassword,
+      userData.confirmPassword
+    );
+    if (validationResult) {
+      const request: any = await userAuth({
+        url: 'auth/resetPassword',
+        data: userData,
+        type: 'POST',
+      });
+      if (request?.data) {
+        const { data, message, success } = request?.data;
+        setNotification({
+          message: message,
+          status: 'success',
+          show: true,
+        });
+        router.push({
+          pathname: '/screens/login',
+        });
+      } else {
+        setNotification({
+          message: request?.error?.data?.error
+            ? request?.error?.data?.error
+            : 'Check Internet Connection and try again',
+          status: 'error',
+          show: true,
+        });
+      }
+    }
+  }
 
   return (
     <>
@@ -35,6 +95,12 @@ function ResetScreen() {
               placeholder="New Password"
               placeholderTextColor={'gray'}
               secureTextEntry
+              value={userData.newPassword} // Bind state
+              onChangeText={(val) =>
+                setUserData((prev) => {
+                  return { ...prev, newPassword: val };
+                })
+              }
             />
           </View>
           <View style={styles.inputContainers}>
@@ -44,13 +110,44 @@ function ResetScreen() {
               placeholder="Repeat Password"
               placeholderTextColor={'gray'}
               secureTextEntry
+              value={userData.confirmPassword} // Bind state
+              onChangeText={(val) =>
+                setUserData((prev) => {
+                  return { ...prev, confirmPassword: val };
+                })
+              }
             />
           </View>
         </View>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Change Password'} color={'Dark'} link={'/screens/login'} />
+          <AppButton
+            title={isLoading ? 'Loading...' : 'Change Password'}
+            color={'Dark'}
+            handleClick={
+              isLoading
+                ? function () {
+                    return '';
+                  }
+                : resetPassword
+            }
+          />
         </View>
+
+        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
+        {notification.show ? (
+          <Notification
+            status={notification.status}
+            message={notification.message}
+            switchShowOff={() => {
+              setNotification((prev) => {
+                return { ...prev, show: false };
+              });
+            }}
+          />
+        ) : (
+          ''
+        )}
       </SafeAreaView>
     </>
   );
