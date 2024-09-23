@@ -20,17 +20,17 @@ function OnBoardScreen() {
 
   const onboardData = [
     {
-      desc: 'Get real-time update and navigation for your destination',
+      desc: 'Get real-time personalized updates and navigation',
       isSelected: true,
       source: 'map',
     },
     {
-      desc: 'Avoid traffic, danger and  navigate safely from the safest route',
+      desc: 'Avoid traffic, danger and  navigate with the best route',
       isSelected: false,
       source: 'route',
     },
     {
-      desc: 'Earn Points as you use and contribute to navigations',
+      desc: 'contribute, interact, navigate and earn points',
       isSelected: false,
       source: 'earn',
     },
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   introText: {
     fontFamily: 'Inter-VariableFont',
     width: '100%',
-    fontSize: 24,
+    fontSize: 21,
     fontStyle: 'normal',
     lineHeight: 32,
     color: '#000000',

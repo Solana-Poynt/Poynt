@@ -4,10 +4,10 @@ import { StyleSheet, View, Image } from 'react-native';
 import Map from '~/components/Map';
 import Mapbox from '@rnmapbox/maps';
 
-const Home: React.FC = () => {
+const Navigate: React.FC = () => {
   return (
     <>
-      <Stack.Screen options={{ title: 'Home', headerShown: false }} />
+      <Stack.Screen options={{ title: 'Navigate', headerShown: false }} />
       <View style={styles.container}>
         <Map />
       </View>
@@ -33,4 +33,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Home;
+export default Navigate;

@@ -15,7 +15,8 @@ export interface IButton {
   handleClick?: () => {};
   link?:
     | '/details'
-    | '/screens/home'
+    | '/(app)/screens/home'
+    | '/(app)/screens/navigate'
     | '/screens/signup'
     | '/screens/otp'
     | '/screens/recover'

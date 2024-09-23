@@ -31,7 +31,7 @@ const SelectedPlace: React.FC<SelectedPlaceMarkerProps> = ({ selectedPlace, onPl
     // Move camera to the selected place
     cameraRef.current?.setCamera({
       centerCoordinate: selectedPlace.coordinates,
-      zoomLevel: 17,
+      zoomLevel: 15,
       animationDuration: 3000,
     });
   };
@@ -39,8 +39,8 @@ const SelectedPlace: React.FC<SelectedPlaceMarkerProps> = ({ selectedPlace, onPl
     <>
       <Camera
         ref={cameraRef}
-        zoomLevel={17}
-        followZoomLevel={17}
+        zoomLevel={15}
+        followZoomLevel={15}
         centerCoordinate={selectedPlace.coordinates}
         animationMode="flyTo"
         animationDuration={3000}
