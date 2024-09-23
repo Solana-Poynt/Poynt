@@ -9,6 +9,7 @@
       "output": "static",
       "favicon": "./assets/splash.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -38,9 +39,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.paultech.poynt"
@@ -50,25 +49,16 @@
         "foregroundImage": "./assets/poynt.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
-      ],
-      "package": "com.paultech.poynt"
+      "package": "com.alphar33.poynt"
     },
     "extra": {
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": "5689d13b-d741-4d3b-92d9-872f12cd795c"
+        "projectId": "d3e67609-29bc-4494-8305-f615bb0191a2"
       }
     },
-    "assets": [
-      "./assets/poynt.png"
-    ]
+    "assets": ["./assets/poynt.png"]
   }
 }

@@ -56,8 +56,6 @@ const useLocation = () => {
     checkPermissionsAndGetLocation();
   }, []);
 
-  console.log(location);
-
   return { location, hasLocationPermission, isLoading };
 };
 
