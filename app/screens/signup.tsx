@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   View,
@@ -14,9 +14,68 @@ import { Stack, useRouter } from 'expo-router';
 import BackButton from '~/components/backButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '~/components/appButton';
+import { useSendDataMutation } from '../../store/api/api';
+import Notification from '../../components/Notification';
+import { areValuesEmpty, validateRegistration } from '../../utils/util.js';
 
 function SignUpScreen() {
   const router = useRouter();
+  const [notification, setNotification] = useState({
+    message: '',
+    status: '',
+    show: false,
+  });
+  const [data, setData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
+
+  //MAKE API CALL
+  const [signUp, { isLoading, reset }] = useSendDataMutation();
+  async function createAccount() {
+    const isEmpty = areValuesEmpty(data);
+    if (isEmpty) {
+      setNotification({
+        message: 'Empty Fields',
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const validationResult = validateRegistration(data.email, data.password, data.confirmPassword);
+    if (validationResult !== true) {
+      setNotification({
+        message: validationResult,
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const request: any = await signUp({
+      url: 'auth/signUp',
+      data: data,
+      type: 'POST',
+    });
+    if (request?.data) {
+      const { data, message, status } = request?.data;
+      setNotification({
+        message: message,
+        status: 'success',
+        show: true,
+      });
+      router.push({ pathname: '/screens/login' });
+    } else {
+      setNotification({
+        message: request?.error?.data?.error
+          ? request?.error?.data?.error
+          : 'Check Internet Conn and try again',
+        status: 'error',
+        show: true,
+      });
+    }
+  }
 
   return (
     <>
@@ -33,7 +92,12 @@ function SignUpScreen() {
               style={styles.inputElements}
               placeholder="Name"
               placeholderTextColor={'gray'}
-              secureTextEntry
+              value={data.name} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, name: val };
+                })
+              }
             />
           </View>
           <View style={styles.inputContainers}>
@@ -42,7 +106,12 @@ function SignUpScreen() {
               style={styles.inputElements}
               placeholder="Email address"
               placeholderTextColor={'gray'}
-              secureTextEntry
+              value={data.email} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, email: val };
+                })
+              }
             />
           </View>
           <View style={styles.inputContainers}>
@@ -52,6 +121,12 @@ function SignUpScreen() {
               placeholder="Password"
               placeholderTextColor={'gray'}
               secureTextEntry
+              value={data.password} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, password: val };
+                })
+              }
             />
           </View>
           <View style={styles.inputContainers}>
@@ -61,6 +136,12 @@ function SignUpScreen() {
               placeholder="Repeat Password"
               placeholderTextColor={'gray'}
               secureTextEntry
+              value={data.confirmPassword} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, confirmPassword: val };
+                })
+              }
             />
           </View>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -70,13 +151,18 @@ function SignUpScreen() {
         </View>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Create Account'} color={'Dark'} link={'/screens/login'} />
           <AppButton
-            title={'Sign up with Google'}
-            color={'Light'}
-            link={'/screens/login'}
-            image={'google'}
+            title={isLoading ? 'Loading...' : 'Create Account'}
+            color={'Dark'}
+            handleClick={
+              isLoading
+                ? function () {
+                    return '';
+                  }
+                : createAccount
+            }
           />
+          <AppButton title={'Sign up with Google'} color={'Light'} image={'google'} />
         </View>
 
         <View
@@ -93,6 +179,21 @@ function SignUpScreen() {
             <Text style={styles.terms}>Login</Text>
           </TouchableOpacity>
         </View>
+
+        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
+        {notification.show ? (
+          <Notification
+            status={notification.status}
+            message={notification.message}
+            switchShowOff={() => {
+              setNotification((prev) => {
+                return { ...prev, show: false };
+              });
+            }}
+          />
+        ) : (
+          ''
+        )}
       </SafeAreaView>
     </>
   );
@@ -109,6 +210,7 @@ const styles = StyleSheet.create({
     paddingLeft: 20,
     paddingRight: 20,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    position: 'relative',
   },
   backBtn: {
     width: '100%',

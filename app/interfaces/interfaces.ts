@@ -12,7 +12,8 @@ export interface IButton {
   title?: string;
   color?: string;
   image?: string;
-  link:
+  handleClick?: () => {};
+  link?:
     | '/details'
     | '/screens/home'
     | '/screens/signup'
