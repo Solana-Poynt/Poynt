@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   View,
@@ -14,9 +14,98 @@ import { Stack, useRouter } from 'expo-router';
 import BackButton from '~/components/backButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '~/components/appButton';
+import { useSendDataMutation } from '../../store/api/api';
+import Notification from '../../components/Notification';
+import { areValuesEmpty, validateRegistration } from '../../utils/util.js';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState, AppDispatch } from '../../store/store';
+import { setIsAuth } from '../../store/slices/isAuthSlice';
+import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage.js';
 
 function LoginScreen() {
   const router = useRouter();
+  const dispatch = useDispatch<AppDispatch>();
+  const [notification, setNotification] = useState({
+    message: '',
+    status: '',
+    show: false,
+  });
+  const [data, setData] = useState({
+    email: '',
+    password: '',
+  });
+
+  //MAKE API CALL
+  const [signIn, { isLoading, reset }] = useSendDataMutation();
+  async function login() {
+    const isEmpty = areValuesEmpty(data);
+    if (isEmpty) {
+      setNotification({
+        message: 'Empty Fields',
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const validationResult = validateRegistration(data.email);
+    if (validationResult !== true) {
+      setNotification({
+        message: validationResult,
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const request: any = await signIn({
+      url: 'auth/login',
+      data: data,
+      type: 'POST',
+    });
+    if (request?.data) {
+      const { message, accessToken, refreshToken, user } = request?.data;
+      setNotification({
+        message: message,
+        status: 'success',
+        show: true,
+      });
+      //dispatch setisauth here
+      dispatch(
+        setIsAuth({
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+          user: user,
+        })
+      );
+      await saveDataToAsyncStorage('accessToken', accessToken);
+      await saveDataToAsyncStorage('refreshToken', refreshToken);
+      await saveDataToAsyncStorage('id', user._id);
+      await saveDataToAsyncStorage('email', user.email);
+      await saveDataToAsyncStorage('name', user.name);
+      router.push({ pathname: '/screens/home' });
+    } else {
+      setNotification({
+        message: request?.error?.data?.error
+          ? request?.error?.data?.error
+          : 'Check Internet Conn and try again',
+        status: 'error',
+        show: true,
+      });
+    }
+  }
+
+  //CHECK IF USER IS AUTHENTICATED
+  // const isAuthenticated = useSelector((state: any) => state.isAuth.isAuth);
+  const isAuthenticated = useSelector((state: RootState) => state.isAuth.isAuth);
+  async function getData() {
+    const email = await getDataFromAsyncStorage('email');
+  }
+  getData();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push({ pathname: '/screens/home' });
+    }
+  }, []);
 
   return (
     <>
@@ -33,7 +122,12 @@ function LoginScreen() {
               style={styles.inputElements}
               placeholder="Email address"
               placeholderTextColor={'gray'}
-              secureTextEntry
+              value={data.email} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, email: val };
+                })
+              }
             />
           </View>
           <View style={styles.inputContainers}>
@@ -43,6 +137,12 @@ function LoginScreen() {
               placeholder="Password"
               placeholderTextColor={'gray'}
               secureTextEntry
+              value={data.password} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, password: val };
+                })
+              }
             />
           </View>
           <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
@@ -53,13 +153,18 @@ function LoginScreen() {
         </View>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Login'} color={'Dark'} link={'/(app)/screens/home'} />
           <AppButton
-            title={'Login with Google'}
-            color={'Light'}
-            link={'/screens/recover'}
-            image={'google'}
+            title={isLoading ? 'Loading...' : 'Login'}
+            color={'Dark'}
+            handleClick={
+              isLoading
+                ? function () {
+                    return '';
+                  }
+                : login
+            }
           />
+          <AppButton title={'Login with Google'} color={'Light'} image={'google'} />
         </View>
 
         <View
@@ -76,6 +181,21 @@ function LoginScreen() {
             <Text style={styles.terms}>Create account</Text>
           </TouchableOpacity>
         </View>
+
+        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
+        {notification.show ? (
+          <Notification
+            status={notification.status}
+            message={notification.message}
+            switchShowOff={() => {
+              setNotification((prev) => {
+                return { ...prev, show: false };
+              });
+            }}
+          />
+        ) : (
+          ''
+        )}
       </SafeAreaView>
     </>
   );

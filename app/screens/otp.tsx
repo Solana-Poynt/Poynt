@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   View,
@@ -14,9 +14,64 @@ import { Stack, useRouter } from 'expo-router';
 import BackButton from '~/components/backButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '~/components/appButton';
+import { useLocalSearchParams } from 'expo-router';
+import { useSendDataMutation } from '~/store/api/api';
+import { areValuesEmpty, validateRegistration } from '~/utils/util';
+import Notification from '../../components/Notification';
 
 function OTPScreen() {
   const router = useRouter();
+  const { email } = useLocalSearchParams();
+  const [userData, setUserData] = useState({ email: email, OTP: '' });
+  const [notification, setNotification] = useState({
+    message: '',
+    status: '',
+    show: false,
+  });
+
+  const [userAuth, { isLoading, reset }] = useSendDataMutation();
+  async function verifyOTP() {
+    const isDataEmpty = areValuesEmpty(userData);
+    if (isDataEmpty) {
+      setNotification({
+        message: 'Empty Fields',
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const validationResult = validateRegistration(userData.email);
+    if (validationResult) {
+      const request: any = await userAuth({
+        url: 'auth/validateOTP',
+        data: userData,
+        type: 'POST',
+      });
+      if (request?.data) {
+        const { data, message, success } = request?.data;
+        setNotification({
+          message: message,
+          status: 'success',
+          show: true,
+        });
+        router.push({
+          pathname: '/screens/reset',
+          params: {
+            email: userData.email,
+            OTP: userData.OTP,
+          },
+        });
+      } else {
+        setNotification({
+          message: request?.error?.data?.error
+            ? request?.error?.data?.error
+            : 'Check Internet Connection and try again',
+          status: 'error',
+          show: true,
+        });
+      }
+    }
+  }
 
   return (
     <>
@@ -33,14 +88,44 @@ function OTPScreen() {
               style={styles.inputElements}
               placeholder="OTP"
               placeholderTextColor={'gray'}
-              secureTextEntry
+              value={userData.OTP} // Bind state
+              onChangeText={(val) =>
+                setUserData((prev) => {
+                  return { ...prev, OTP: val };
+                })
+              }
             />
           </View>
         </View>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Verify'} color={'Dark'} link={'/screens/reset'} />
+          <AppButton
+            title={isLoading ? 'Loading...' : 'Verify'}
+            color={'Dark'}
+            handleClick={
+              isLoading
+                ? function () {
+                    return '';
+                  }
+                : verifyOTP
+            }
+          />
         </View>
+
+        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
+        {notification.show ? (
+          <Notification
+            status={notification.status}
+            message={notification.message}
+            switchShowOff={() => {
+              setNotification((prev) => {
+                return { ...prev, show: false };
+              });
+            }}
+          />
+        ) : (
+          ''
+        )}
       </SafeAreaView>
     </>
   );

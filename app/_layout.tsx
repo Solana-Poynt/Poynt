@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import BottomNav from '~/components/BottomNav';
-// import AppLoading from 'expo-app-loading';
+import { StoreProvider } from '../store/provider';
 
 export default function Layout() {
   const [fontsLoaded] = useFonts({
@@ -16,8 +16,9 @@ export default function Layout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack />
-      {/* <BottomNav /> */}
+      <StoreProvider>
+        <Stack />
+      </StoreProvider>
     </GestureHandlerRootView>
   );
 }

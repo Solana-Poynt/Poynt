@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   View,
@@ -14,9 +14,63 @@ import { Stack, useRouter } from 'expo-router';
 import BackButton from '~/components/backButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppButton from '~/components/appButton';
+import { useSendDataMutation } from '~/store/api/api';
+import { areValuesEmpty, validateRegistration } from '~/utils/util';
+import Notification from '../../components/Notification';
 
 function RecoverSreen() {
   const router = useRouter();
+  const [userData, setUserData] = useState({ email: '' });
+  const [notification, setNotification] = useState({
+    message: '',
+    status: '',
+    show: false,
+  });
+
+  const [userAuth, { isLoading, reset }] = useSendDataMutation();
+  async function sendMail() {
+    const isDataEmpty = areValuesEmpty(userData);
+    if (isDataEmpty) {
+      setNotification({
+        message: 'Empty Fields',
+        status: 'error',
+        show: true,
+      });
+      return;
+    }
+    const validationResult = validateRegistration(userData.email);
+    if (validationResult) {
+      const request: any = await userAuth({
+        url: 'auth/forgotPassword',
+        data: {
+          email: userData.email,
+        },
+        type: 'POST',
+      });
+      if (request?.data) {
+        const { data, message, success } = request?.data;
+        setNotification({
+          message: message,
+          status: 'success',
+          show: true,
+        });
+        router.push({
+          pathname: '/screens/otp',
+          params: {
+            email: userData.email,
+          },
+        });
+      } else {
+        setNotification({
+          message: request?.error?.data?.error
+            ? request?.error?.data?.error
+            : 'Check Internet Connection and try again',
+          status: 'error',
+          show: true,
+        });
+      }
+    }
+  }
 
   return (
     <>
@@ -36,14 +90,44 @@ function RecoverSreen() {
               style={styles.inputElements}
               placeholder="Email address"
               placeholderTextColor={'gray'}
-              secureTextEntry
+              value={userData.email} // Bind state
+              onChangeText={(val) =>
+                setUserData((prev) => {
+                  return { ...prev, email: val };
+                })
+              }
             />
           </View>
         </View>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Send Code'} color={'Dark'} link={'/screens/otp'} />
+          <AppButton
+            title={isLoading ? 'Loading...' : 'Send Code'}
+            color={'Dark'}
+            handleClick={
+              isLoading
+                ? function () {
+                    return '';
+                  }
+                : sendMail
+            }
+          />
         </View>
+
+        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
+        {notification.show ? (
+          <Notification
+            status={notification.status}
+            message={notification.message}
+            switchShowOff={() => {
+              setNotification((prev) => {
+                return { ...prev, show: false };
+              });
+            }}
+          />
+        ) : (
+          ''
+        )}
       </SafeAreaView>
     </>
   );
