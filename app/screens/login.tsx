@@ -20,6 +20,7 @@ import { areValuesEmpty, validateRegistration } from '../../utils/util.js';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState, AppDispatch } from '../../store/store';
 import { setIsAuth } from '../../store/slices/isAuthSlice';
+
 import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage.js';
 
 function LoginScreen() {

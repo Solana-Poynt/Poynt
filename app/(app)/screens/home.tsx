@@ -1,74 +1,214 @@
 import { Stack } from 'expo-router';
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useWeatherInfo, useWeatherAnalysis } from '~/hooks/useLocation';
+import PulsingLoadingCard from '~/components/Loader';
 
 const Home: React.FC = () => {
+  const { currentWeather, isLoading, userTime, refreshWeather, error } = useWeatherInfo();
+  const { heatPrediction, rainPrediction, uvPrediction, windPrediction, visibilityPrediction } =
+    useWeatherAnalysis(currentWeather);
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const currentLocation = currentWeather
+    ? `${currentWeather.name}, ${currentWeather.region},`
+    : 'Location unavailable';
+
+  const toggleModal = () => setModalVisible(!modalVisible);
+
   return (
     <>
       <Stack.Screen options={{ title: 'Onboard', headerShown: false }} />
       <SafeAreaView style={styles.container}>
-        {/* <View style={styles.header}>
+        <View style={styles.header}>
           <TouchableOpacity style={styles.giftButton}>
-            <Ionicons name="gift" size={24} color="black" />
-            <Text style={styles.giftText}>Claim daily point</Text>
-          </TouchableOpacity>
-          <TouchableOpacity>
-            <Ionicons name="notifications" size={24} color="black" />
-          </TouchableOpacity>
-        </View> */}
+            <View style={styles.giftIcon}>
+              <Ionicons name="gift" size={19} color="black" />
+            </View>
 
+            <Text style={styles.giftText}>coming soon!</Text>
+          </TouchableOpacity>
+          {/* <TouchableOpacity>
+            <Ionicons name="notifications" size={24} color="" />
+          </TouchableOpacity> */}
+        </View>
         <Text style={styles.greeting}>Hello, Daniel</Text>
-        <Text style={styles.date}>Tuesday, Feb. 01</Text>
-        <Text style={styles.balance}>$ 10,000.00</Text>
 
-        <View style={styles.locationCard}>
-          <View style={styles.locationInfo}>
-            <Text style={styles.locationTitle}>Home location</Text>
-            <Text style={styles.locationName}>New Jersey, USA</Text>
-            <View style={styles.coordinates}>
-              <Text style={styles.coordinateText}>Longitude</Text>
-              <Text style={styles.coordinateValue}>49.001°N</Text>
-            </View>
-            <View style={styles.coordinates}>
-              <Text style={styles.coordinateText}>Latitude</Text>
-              <Text style={styles.coordinateValue}>49.501°E</Text>
-            </View>
-          </View>
-          <View style={styles.weatherInfo}>
-            <Text style={styles.weatherTitle}>Weather</Text>
-            <MaterialCommunityIcons name="weather-lightning" size={24} color="black" />
-            <Text style={styles.temperature}>32°C</Text>
-            <Text style={styles.weatherCondition}>sunny</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Your places</Text>
-        <TouchableOpacity style={styles.placeItem}>
-          <MaterialIcons name="work" size={24} color="black" />
-          <Text style={styles.placeName}>Poynt enterprise</Text>
-          <Ionicons name="chevron-forward-sharp" size={24} color="black" />
-        </TouchableOpacity>
-        <View style={styles.distanceInfo}>
-          <Ionicons name="home-outline" size={24} color="black" />
-          <Text style={styles.distanceText}>Distance from home : 5Km</Text>
-          <MaterialCommunityIcons name="weather-lightning" size={24} color="black" />
-          <Text style={styles.weatherText}>32°C sunny</Text>
-        </View>
-
-        <View style={styles.activityIcons}>
-          {['directions-car', 'directions-run', 'directions-bike', 'directions-walk'].map(
-            (iconName, index) => (
-              <View key={index} style={styles.activityItem}>
-                <Ionicons name="home-outline" size={24} color="black" />
-                <Text style={styles.activityTime}>{`${index + 4}hrs ${(index + 1) * 20}m`}</Text>
-              </View>
-            )
+        <View style={styles.timerContainer}>
+          {isLoading ? (
+            <Text>...Loading</Text>
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : (
+            <Text>{userTime}</Text>
           )}
+
+          <Text style={styles.balance}>poynts</Text>
         </View>
+
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <PulsingLoadingCard />
+          </View>
+        ) : (
+          <View style={styles.locationCard}>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+              }}>
+              <Text style={styles.locationTitle}>Current Location</Text>
+              <Text style={styles.weatherTitle}>Traffic</Text>
+            </View>
+
+            <View style={styles.locationInfo}>
+              <View style={{ flexDirection: 'column' }}>
+                <Text style={styles.locationName}>{currentLocation}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={styles.locationName}>{currentWeather?.country}</Text>
+                  <TouchableOpacity onPress={toggleModal} style={styles.infoButton}>
+                    <Ionicons name="information-circle" size={20} color="#E9B9B9" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.otherInfo}>
+                <View>
+                  <Text style={styles.traffic}>Slight Traffic</Text>
+                </View>
+              </View>
+            </View>
+            {/* /////////////////// */}
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+              }}>
+              <Text style={styles.weatherTitle}>Weather</Text>
+            </View>
+            <View style={styles.weatherInfo}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                }}>
+                <Text style={styles.temperature}>{currentWeather?.temp_c}°C</Text>
+                <Image
+                  source={{ uri: `https:${currentWeather?.icon}` }}
+                  style={{ width: 40.32, height: 40.32 }}
+                />
+              </View>
+
+              <Text
+                style={{
+                  fontSize: 16,
+                  color: 'white',
+                  fontWeight: '600',
+                }}>
+                {currentWeather?.condition}
+              </Text>
+            </View>
+          </View>
+        )}
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignContent: 'center',
+            marginTop: 12,
+          }}>
+          <Text style={styles.sectionTitle}>Your places</Text>
+          <TouchableOpacity onPress={refreshWeather} style={{}}>
+            <Ionicons name="refresh-circle" size={32} color="#A71919" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.noPlace}>
+          <Text>No Saved Place Yet</Text>
+        </View>
+
+        {/* <View>
+          <TouchableOpacity style={styles.placeItem}>
+            <MaterialIcons name="work" size={24} color="black" />
+            <Text style={styles.placeName}>Poynt enterprise</Text>
+            <Ionicons name="chevron-forward-sharp" size={24} color="black" />
+          </TouchableOpacity>
+          <View style={styles.distanceInfo}>
+            <Ionicons name="home-outline" size={24} color="black" />
+            <Text style={styles.distanceText}>Distance from home : 5Km</Text>
+            <MaterialCommunityIcons name="weather-lightning" size={24} color="black" />
+            <Text style={styles.weatherText}>32°C sunny</Text>
+          </View>
+
+          <View style={styles.activityIcons}>
+            {['directions-car', 'directions-run', 'directions-bike', 'directions-walk'].map(
+              (iconName, index) => (
+                <View key={index} style={styles.activityItem}>
+                  <Ionicons name="home-outline" size={24} color="black" />
+                  <Text style={styles.activityTime}>{`${index + 4}hrs ${(index + 1) * 20}m`}</Text>
+                </View>
+              )
+            )}
+          </View>
+        </View> */}
+        {/* modal view  */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={toggleModal}>
+          <View style={styles.centeredView}>
+            <View style={styles.modalView}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: '700',
+                  textAlign: 'center',
+                }}>
+                Real Time Weather Information
+              </Text>
+              <View
+                style={{
+                  flexDirection: 'column',
+                  gap: 8,
+                  padding: 12,
+                }}>
+                <View style={styles.analysisText}>
+                  <Text> Heat Analysis</Text>
+                  <Text>{heatPrediction}</Text>
+                </View>
+
+                <View style={styles.analysisText}>
+                  <Text>Rain Analysis</Text>
+                  <Text>{rainPrediction}</Text>
+                </View>
+
+                <View style={styles.analysisText}>
+                  <Text> UV Analysis</Text>
+                  <Text>{uvPrediction}</Text>
+                </View>
+
+                <View style={styles.analysisText}>
+                  <Text> Wind Analysis</Text>
+                  <Text>{windPrediction}</Text>
+                </View>
+
+                <View style={styles.analysisText}>
+                  <Text> Visibility Analysis</Text>
+                  <Text>{visibilityPrediction}</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.closeButton} onPress={toggleModal}>
+                <Text style={styles.textStyle}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
@@ -77,95 +217,148 @@ const Home: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'white',
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 24,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 43,
   },
+  errorText: {
+    fontSize: 18,
+    color: 'red',
+    textAlign: 'center',
+  },
+
   giftButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFE4E1',
-    padding: 10,
     borderRadius: 20,
+  },
+  giftIcon: {
+    backgroundColor: '#dad7cd',
+    padding: 4,
+    borderRadius: 40,
   },
   giftText: {
     marginLeft: 5,
-    color: '#FF6347',
+    color: 'black',
   },
   greeting: {
     fontSize: 24,
     fontWeight: '800',
     lineHeight: 32,
-    marginTop: 20,
-    alignItems: 'stretch',
+  },
+
+  timerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 40,
   },
   date: {
     fontSize: 16,
     color: '#666',
   },
   balance: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginTop: 10,
+    fontSize: 14,
+    fontWeight: '900',
+    backgroundColor: '#F8E8E8',
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    justifyContent: 'center',
+    borderWidth: 1,
+    letterSpacing: 0.5,
+    borderColor: '#F8E8E8',
+    shadowColor: 'rgba(0, 0, 0, 0.10)',
+    shadowOffset: { width: 2, height: 4 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 25,
   },
+
+  loadingContainer: {
+    marginTop: 10,
+    // flex: 1,
+    // justifyContent: 'center',
+    // alignItems: 'center',
+  },
+
   locationCard: {
-    flexDirection: 'row',
-    backgroundColor: '#DC143C',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 20,
+    flexDirection: 'column',
+    backgroundColor: '#A71919',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 21,
+    marginTop: 6,
+    width: '100%',
   },
   locationInfo: {
-    flex: 2,
+    flexDirection: 'row',
+    alignContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 36,
   },
   weatherInfo: {
-    flex: 1,
-    alignItems: 'center',
+    flexDirection: 'column',
+    // alignItems: 'center',
   },
+
   locationTitle: {
-    color: '#FFF',
-    fontSize: 16,
+    color: '#DE9797',
+    fontSize: 12,
+    fontWeight: '500',
   },
   locationName: {
+    flexWrap: 'wrap',
     color: '#FFF',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     marginTop: 5,
   },
-  coordinates: {
-    marginTop: 10,
+
+  weatherIcon: {
+    position: 'absolute',
+    top: 0,
+    left: 62,
   },
-  coordinateText: {
-    color: '#FFF',
-    fontSize: 12,
-  },
-  coordinateValue: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+
   weatherTitle: {
-    color: '#FFF',
-    fontSize: 16,
+    color: '#DE9797',
+    fontSize: 12,
+    fontWeight: '500',
   },
   temperature: {
     color: '#FFF',
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   weatherCondition: {
     color: '#FFF',
     fontSize: 14,
   },
+
+  otherInfo: {
+    flexDirection: 'row',
+    marginTop: 6,
+    justifyContent: 'space-between',
+    // alignItems: 'center',
+  },
+
+  trafficInfo: {},
+  traffic: {
+    color: '#FFF',
+    fontSize: 17,
+    fontWeight: 'bold',
+  },
+
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginTop: 20,
   },
   placeItem: {
     flexDirection: 'row',
@@ -203,6 +396,95 @@ const styles = StyleSheet.create({
   activityTime: {
     marginTop: 5,
     fontSize: 12,
+  },
+  modalView: {
+    backgroundColor: '#FCEAEA',
+    flexDirection: 'column',
+    gap: 42,
+    borderRadius: 20,
+    padding: 40,
+    // alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 50,
+    maxHeight: '60%',
+  },
+  analysisText: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    fontSize: 17,
+    borderBottomWidth: 1,
+    padding: 4,
+    marginBottom: 3,
+    borderColor: '#bababa',
+    borderRadius: 3,
+    fontWeight: 'bold',
+    gap: 45,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 45,
+    borderBottomWidth: 3,
+    paddingBottom: 3,
+    borderBottomColor: 'white',
+  },
+  modalWeatherInfo: {
+    borderWidth: 3,
+    borderColor: 'white',
+    padding: 14,
+    borderRadius: 12,
+  },
+  modalText: {
+    marginBottom: 15,
+    // textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  closeButton: {
+    backgroundColor: '#A71919',
+    borderRadius: 20,
+    padding: 10,
+    elevation: 2,
+    // marginTop: 35,
+  },
+  textStyle: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  infoButton: {
+    marginTop: 9,
+  },
+
+  noPlace: {
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    backgroundColor: 'white',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    shadowColor: '#0005',
+    shadowOffset: { width: 2, height: 4 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 4,
+    alignItems: 'center',
+    marginVertical: 38,
+    padding: 18,
+    borderColor: '#CFCFCF',
   },
 });
 

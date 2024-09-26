@@ -132,8 +132,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#D9D9D9',
   },
   imageStyle: {
-    width: 290,
-    height: 290,
+    width: 250,
+    height: 250,
     marginTop: 90,
   },
   introText: {
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   buttonContainers: {
     width: '100%',
-    marginTop: 50,
+    marginTop: 110,
     gap: 20,
     justifyContent: 'center',
     alignItems: 'center',
