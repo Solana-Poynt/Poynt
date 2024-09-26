@@ -23,7 +23,7 @@ import { requestLocationPermission } from '~/utils/Permissions';
 import MapboxSearch from './SearchBar';
 import SelectedPlace from './SelectedPlace';
 import ViewPlace from './ViewPlace';
-import useLocation from '~/hooks/useLocation';
+import { useWeatherInfo } from '~/hooks/useLocation';
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
 // [number, number] | number[]
@@ -45,7 +45,7 @@ export default function Map() {
   const [userLocation, setUserLocation] = useState<[number, number] | number[]>();
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
-  const { location, hasLocationPermission } = useLocation();
+  const { location, hasLocationPermission } = useWeatherInfo();
 
   const mapRef = useRef<MapView>(null);
   const cameraRef = useRef<Camera>(null);
