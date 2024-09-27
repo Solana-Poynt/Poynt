@@ -25,7 +25,7 @@ export default function BottomNav() {
     },
     {
       name: 'Profile',
-      path: '/screens/settings',
+      path: '/screens/profile',
       icon: 'person',
     },
     // Add this if you have a settings screen
