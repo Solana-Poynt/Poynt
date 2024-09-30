@@ -1,9 +1,6 @@
-import {
-  PermissionsAndroid,
-  Platform,
-} from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 
-// find a way to ecrypt user location 
+// find a way to ecrypt user location
 export const requestLocationPermission = async () => {
   if (Platform.OS === 'android') {
     try {

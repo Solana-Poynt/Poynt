@@ -4,16 +4,24 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import AntDesign from '@expo/vector-icons/AntDesign';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useWeatherInfo, useWeatherAnalysis } from '~/hooks/useLocation';
 import PulsingLoadingCard from '~/components/Loader';
 import { useGetUserQuery } from '../../../store/api/api';
+import IconCircleProgress from '~/components/icons/icons';
 import { IUser } from '~/app/interfaces/interfaces';
 
 const Home: React.FC = () => {
   const { currentWeather, isLoading, userTime, refreshWeather, error } = useWeatherInfo();
-  const { heatPrediction, rainPrediction, uvPrediction, windPrediction, visibilityPrediction } =
-    useWeatherAnalysis(currentWeather);
+  const {
+    heatPrediction,
+    rainPrediction,
+    uvPrediction,
+    windPrediction,
+    visibilityPrediction,
+    extremePrediction,
+  } = useWeatherAnalysis(currentWeather);
   const [modalVisible, setModalVisible] = useState(false);
 
   const currentLocation = currentWeather
@@ -25,8 +33,7 @@ const Home: React.FC = () => {
   //MAKE CALL TO BACKEND TO FTECH USER DATA
   const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
   const user: IUser | undefined = userData && userData?.data;
-  //YOU CAN THEN FIND ALL USERS DATA AND  USE ANYONE YOU WANT, LOG USERDATA TO YOUR CONSOLE TO SEE THE DATA STRUCTURE AND HOW YOUC CAN ACCESS THE PROPERTIES YOU WANT.
-  //CHECK LINE 47 TO SEE HOW I AM GETTING THE USERS NAME FROM THE DATA STRUCTURE
+ 
 
   return (
     <>
@@ -44,16 +51,10 @@ const Home: React.FC = () => {
             <Ionicons name="notifications" size={24} color="" />
           </TouchableOpacity> */}
         </View>
-        <Text style={styles.greeting}>Hello, {user?.name && user?.name.toUpperCase()}</Text>
+        <Text style={styles.greeting}>Hello, {user?.name && user?.name}</Text>
 
         <View style={styles.timerContainer}>
-          {isLoading ? (
-            <Text>...Loading</Text>
-          ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : (
-            <Text>{userTime}</Text>
-          )}
+          <Text style={{ fontSize: 13, marginLeft: 8, marginTop: 12 }}>{userTime}</Text>
 
           <Text style={styles.balance}>poynts</Text>
         </View>
@@ -63,65 +64,71 @@ const Home: React.FC = () => {
             <PulsingLoadingCard />
           </View>
         ) : (
-          <View style={styles.locationCard}>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-              }}>
-              <Text style={styles.locationTitle}>Current Location</Text>
-              <Text style={styles.weatherTitle}>Traffic</Text>
-            </View>
-
-            <View style={styles.locationInfo}>
-              <View style={{ flexDirection: 'column' }}>
-                <Text style={styles.locationName}>{currentLocation}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={styles.locationName}>{currentWeather?.country}</Text>
-                  <TouchableOpacity onPress={toggleModal} style={styles.infoButton}>
-                    <Ionicons name="information-circle" size={20} color="#E9B9B9" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <View style={styles.otherInfo}>
-                <View>
-                  <Text style={styles.traffic}>Slight Traffic</Text>
-                </View>
-              </View>
-            </View>
-            {/* /////////////////// */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-              }}>
-              <Text style={styles.weatherTitle}>Weather</Text>
-            </View>
-            <View style={styles.weatherInfo}>
+          <View style={{ marginBottom: 16 }}>
+            <View style={styles.locationCard}>
               <View
                 style={{
                   flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 5,
+                  justifyContent: 'space-between',
                 }}>
-                <Text style={styles.temperature}>{currentWeather?.temp_c}°C</Text>
-                <Image
-                  source={{ uri: `https:${currentWeather?.icon}` }}
-                  style={{ width: 40.32, height: 40.32 }}
-                />
+                <Text style={styles.locationTitle}>Current Location</Text>
+                <Text style={styles.weatherTitle}>Traffic</Text>
               </View>
 
-              <Text
+              <View style={styles.locationInfo}>
+                <View style={{ flexDirection: 'column' }}>
+                  <Text style={styles.locationName}>{currentLocation}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={styles.locationName}>{currentWeather?.country}</Text>
+                    <TouchableOpacity onPress={toggleModal} style={styles.infoButton}>
+                      <Ionicons name="information-circle" size={20} color="#E9B9B9" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={styles.otherInfo}>
+                  <View>
+                    <Text style={styles.traffic}>Slight Traffic</Text>
+                  </View>
+                </View>
+              </View>
+              {/* /////////////////// */}
+              <View
                 style={{
-                  fontSize: 16,
-                  color: 'white',
-                  fontWeight: '600',
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
                 }}>
-                {currentWeather?.condition}
-              </Text>
+                <Text style={styles.weatherTitle}>Weather</Text>
+                <Text style={styles.weatherTitle}>Condition</Text>
+              </View>
+              <View style={styles.weatherInfo}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                  }}>
+                  <Text style={styles.temperature}>{currentWeather?.temp_c}°C</Text>
+                  <Image
+                    source={{ uri: `https:${currentWeather?.icon}` }}
+                    style={{ width: 40.32, height: 40.32 }}
+                  />
+                </View>
+
+                <Text
+                  style={{
+                    fontSize: 16,
+                    color: 'white',
+                    fontWeight: '600',
+                  }}>
+                  {currentWeather?.condition}
+                </Text>
+              </View>
             </View>
+
+            <View style={styles.cardPart}></View>
           </View>
         )}
+
         <View
           style={{
             flexDirection: 'row',
@@ -135,34 +142,99 @@ const Home: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.noPlace}>
-          <Text>No Saved Place Yet</Text>
+        {/* Places And all  */}
+        <View style={{ marginBottom: 16 }}>
+          <View style={styles.savedPlace}>
+            <View style={styles.addPlace}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                }}>
+                <AntDesign name="questioncircle" size={25} color="#b8b8b8" />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                  }}>
+                  Add Home Address
+                </Text>
+              </View>
+
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderRadius: 32,
+                  padding: 3,
+                  borderColor: '#eeeeee',
+                  backgroundColor: '#eeeeee',
+                }}>
+                <Ionicons name="add-sharp" size={24} color="black" />
+              </View>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                width: '100%',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingHorizontal: 4,
+              }}>
+              <Text style={styles.placeText}>Distance: __km</Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                }}>
+                <MaterialCommunityIcons name="weather-fog" size={24} color="orange" />
+                <Text>__°C</Text>
+              </View>
+            </View>
+            {/* ////////////////////// */}
+            <View
+              style={{
+                flexDirection: 'row',
+                width: '100%',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingHorizontal: 4,
+                marginVertical: 6,
+              }}>
+              <View style={styles.placeIcons}>
+                <IconCircleProgress
+                  progress={100}
+                  icon={<Ionicons name="car-sport" size={22} color="black" />}
+                />
+                <Text style={styles.placeText}>0hrs 00m</Text>
+              </View>
+              <View style={styles.placeIcons}>
+                <IconCircleProgress
+                  progress={100}
+                  icon={<MaterialCommunityIcons name="motorbike" size={22} color="black" />}
+                />
+                <Text style={styles.placeText}>0hrs 00m</Text>
+              </View>
+              <View style={styles.placeIcons}>
+                <IconCircleProgress
+                  progress={100}
+                  icon={<MaterialIcons name="directions-bike" size={22} color="black" />}
+                />
+                <Text style={styles.placeText}>0hrs 00m</Text>
+              </View>
+              <View style={styles.placeIcons}>
+                <IconCircleProgress
+                  progress={100}
+                  icon={<MaterialCommunityIcons name="walk" size={22} color="black" />}
+                />
+                <Text style={styles.placeText}>0hrs 00m</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.placePart}></View>
         </View>
 
-        {/* <View>
-          <TouchableOpacity style={styles.placeItem}>
-            <MaterialIcons name="work" size={24} color="black" />
-            <Text style={styles.placeName}>Poynt enterprise</Text>
-            <Ionicons name="chevron-forward-sharp" size={24} color="black" />
-          </TouchableOpacity>
-          <View style={styles.distanceInfo}>
-            <Ionicons name="home-outline" size={24} color="black" />
-            <Text style={styles.distanceText}>Distance from home : 5Km</Text>
-            <MaterialCommunityIcons name="weather-lightning" size={24} color="black" />
-            <Text style={styles.weatherText}>32°C sunny</Text>
-          </View>
-
-          <View style={styles.activityIcons}>
-            {['directions-car', 'directions-run', 'directions-bike', 'directions-walk'].map(
-              (iconName, index) => (
-                <View key={index} style={styles.activityItem}>
-                  <Ionicons name="home-outline" size={24} color="black" />
-                  <Text style={styles.activityTime}>{`${index + 4}hrs ${(index + 1) * 20}m`}</Text>
-                </View>
-              )
-            )}
-          </View>
-        </View> */}
         {/* modal view  */}
         <Modal
           animationType="slide"
@@ -173,7 +245,7 @@ const Home: React.FC = () => {
             <View style={styles.modalView}>
               <Text
                 style={{
-                  fontSize: 18,
+                  fontSize: 14,
                   fontWeight: '700',
                   textAlign: 'center',
                 }}>
@@ -181,33 +253,236 @@ const Home: React.FC = () => {
               </Text>
               <View
                 style={{
-                  flexDirection: 'column',
-                  gap: 8,
-                  padding: 12,
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
                 }}>
-                <View style={styles.analysisText}>
-                  <Text> Heat Analysis</Text>
-                  <Text>{heatPrediction}</Text>
+                {/* ////heat prediction  */}
+                <View style={[styles.analysisText, styles.gridItem]}>
+                  <View
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      paddingLeft: 12,
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                    <MaterialCommunityIcons name="sun-thermometer" size={25} color="#e27800" />
+                    <View
+                      style={{
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: 'black',
+                        }}>
+                        Heat
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '300',
+                          color: 'black',
+                        }}>
+                        {heatPrediction}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
-                <View style={styles.analysisText}>
-                  <Text>Rain Analysis</Text>
-                  <Text>{rainPrediction}</Text>
+                {/* rain prediction  */}
+
+                <View style={[styles.analysisText, styles.gridItem]}>
+                  <View
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      paddingLeft: 12,
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                    <Ionicons name="rainy-sharp" size={25} color="blue" />
+                    <View
+                      style={{
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: 'black',
+                        }}>
+                        Rain
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '300',
+                          color: 'black',
+                        }}>
+                        {rainPrediction}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                {/* UV analysis */}
+                <View style={[styles.analysisText, styles.gridItem]}>
+                  <View
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      paddingLeft: 12,
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                    <Ionicons name="sunny-sharp" size={25} color="red" />
+                    <View
+                      style={{
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: 'black',
+                        }}>
+                        UV
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '300',
+                          color: 'black',
+                        }}>
+                        {uvPrediction}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
-                <View style={styles.analysisText}>
-                  <Text> UV Analysis</Text>
-                  <Text>{uvPrediction}</Text>
+                <View style={[styles.analysisText, styles.gridItem]}>
+                  <View
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      paddingLeft: 12,
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                    <MaterialCommunityIcons name="weather-windy" size={25} color="black" />
+                    <View
+                      style={{
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: 'black',
+                        }}>
+                        Wind
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '300',
+                          color: 'black',
+                        }}>
+                        {windPrediction}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                {/* visibility  */}
+
+                <View style={[styles.analysisText, styles.gridItem]}>
+                  <View
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      paddingLeft: 12,
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                    <MaterialCommunityIcons name="eye-circle" size={25} color="green" />
+                    <View
+                      style={{
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: 'black',
+                        }}>
+                        Visibility
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '300',
+                          color: 'black',
+                        }}>
+                        {visibilityPrediction}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
-                <View style={styles.analysisText}>
-                  <Text> Wind Analysis</Text>
-                  <Text>{windPrediction}</Text>
-                </View>
+                {/* extreme  */}
 
-                <View style={styles.analysisText}>
-                  <Text> Visibility Analysis</Text>
-                  <Text>{visibilityPrediction}</Text>
+                <View style={[styles.analysisText, styles.gridItem]}>
+                  <View
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      paddingLeft: 12,
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                    <MaterialCommunityIcons name="alert-box" size={25} color="#A71919" />
+                    <View
+                      style={{
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: 'black',
+                        }}>
+                        Extreme
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '300',
+                          color: 'black',
+                        }}>
+                        {extremePrediction}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
 
@@ -233,7 +508,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 43,
+    marginBottom: 32,
   },
   errorText: {
     fontSize: 18,
@@ -256,7 +531,7 @@ const styles = StyleSheet.create({
     color: 'black',
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     lineHeight: 32,
   },
@@ -265,7 +540,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 20,
   },
   date: {
     fontSize: 16,
@@ -291,29 +566,51 @@ const styles = StyleSheet.create({
 
   loadingContainer: {
     marginTop: 10,
-    // flex: 1,
-    // justifyContent: 'center',
-    // alignItems: 'center',
   },
 
   locationCard: {
     flexDirection: 'column',
     backgroundColor: '#A71919',
-    borderRadius: 20,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    marginTop: 8,
+    width: '100%',
+    zIndex: 2,
+    shadowColor: 'rgba(199, 72, 72, 0.25)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+  },
+
+  cardPart: {
+    backgroundColor: '#e5baba',
+    position: 'absolute',
+    width: '100%',
+    height: 32,
+    borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 21,
     marginTop: 6,
-    width: '100%',
+    bottom: -4.5,
+    zIndex: -2,
+    shadowColor: 'rgba(199, 72, 72, 0.25)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
   },
   locationInfo: {
     flexDirection: 'row',
     alignContent: 'center',
     justifyContent: 'space-between',
-    marginBottom: 36,
+    marginBottom: 22,
   },
   weatherInfo: {
-    flexDirection: 'column',
-    // alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 
   locationTitle: {
@@ -324,7 +621,7 @@ const styles = StyleSheet.create({
   locationName: {
     flexWrap: 'wrap',
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     marginTop: 5,
   },
@@ -360,7 +657,7 @@ const styles = StyleSheet.create({
   trafficInfo: {},
   traffic: {
     color: '#FFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 
@@ -406,11 +703,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   modalView: {
-    backgroundColor: '#FCEAEA',
+    backgroundColor: '#edd1d1',
     flexDirection: 'column',
-    gap: 42,
+    gap: 20,
     borderRadius: 20,
-    padding: 40,
+    padding: 12,
+    margin: 10,
     // alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
@@ -422,18 +720,19 @@ const styles = StyleSheet.create({
     elevation: 50,
     maxHeight: '60%',
   },
-  analysisText: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    fontSize: 17,
-    borderBottomWidth: 1,
-    padding: 4,
-    marginBottom: 3,
-    borderColor: '#bababa',
-    borderRadius: 3,
-    fontWeight: 'bold',
-    gap: 45,
+
+  gridItem: {
+    width: '49%',
+    marginBottom: 5,
   },
+  analysisText: {
+    backgroundColor: '#FCEAEA',
+    padding: 10,
+    borderRadius: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -473,26 +772,61 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   infoButton: {
-    marginTop: 9,
+    marginTop: 7,
   },
 
-  noPlace: {
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+  savedPlace: {
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     borderRadius: 12,
+    gap: 25,
     backgroundColor: 'white',
-    flexDirection: 'row',
+    flexDirection: 'column',
     justifyContent: 'space-around',
     shadowColor: '#0005',
     shadowOffset: { width: 2, height: 4 },
     shadowOpacity: 0.9,
     shadowRadius: 5,
-    elevation: 4,
+    elevation: 14,
     alignItems: 'center',
-    marginVertical: 38,
-    padding: 18,
-    borderColor: '#CFCFCF',
+    marginVertical: 18,
+  },
+
+  addPlace: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderBottomWidth: 2,
+    paddingBottom: 12,
+    borderBottomColor: '#eeeeee',
+  },
+  placeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  placeIcons: {
+    flexDirection: 'column',
+    gap: 9,
+    alignItems: 'center',
+  },
+  placePart: {
+    backgroundColor: '#eeeeee',
+    position: 'absolute',
+    width: '100%',
+    height: 32,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 21,
+    marginTop: 6,
+    bottom: 9,
+    zIndex: -2,
+    shadowColor: 'rgba(199, 72, 72, 0.25)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
   },
 });
 
