@@ -4,6 +4,7 @@ import {
   saveDataToAsyncStorage,
   deleteDataFromAsyncStorage,
 } from '../../utils/localStorage';
+import { IUser } from '~/app/interfaces/interfaces';
 
 // Define the types for the state and payloads
 interface AuthState {
@@ -12,17 +13,11 @@ interface AuthState {
   refreshToken: string | null;
 }
 
-interface User {
-  _id: string;
-  email: string;
-  name: string;
-}
-
 interface SetIsAuthPayload {
   isAuth?: boolean;
   accessToken: string;
   refreshToken: string;
-  user: User;
+  user: IUser;
 }
 
 // Initial state
