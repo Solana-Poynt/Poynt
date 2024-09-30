@@ -2,9 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Platform, StatusBar, StyleSheet, View, Image, Text, TouchableOpacity } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useGetUserQuery } from '../../../store/api/api';
+import { IUser } from '~/app/interfaces/interfaces';
 
 function ProfileScreen() {
   const router = useRouter();
+
+  //MAKE CALL TO BACKEND TO FTECH USER DATA
+  const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
+  const user: IUser | undefined = userData && userData?.data;
 
   const listItems = [
     {
@@ -65,12 +71,11 @@ function ProfileScreen() {
           <View style={styles.imageContainer}>
             <Image
               style={styles.userImage}
-              source={require('../../../assets/user-image.png')}
+              source={require('../../../assets/vatar.png')}
               resizeMode="cover"
             />
-            <Image style={styles.imageIcon} source={require('../../../assets/camera.png')} />
           </View>
-          <Text style={styles.userName}>Paul Chidiadi</Text>
+          <Text style={styles.userName}>{user?.name && user?.name}</Text>
           <View style={styles.cardBottom}>
             <View style={styles.cardBottomInner}>
               <Image source={require('../../../assets/tier.png')} />
@@ -138,8 +143,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   userImage: {
-    width: 104,
-    height: 104,
+    width: 150,
+    height: 150,
     borderRadius: 104 / 2,
   },
   userName: {
