@@ -2,18 +2,12 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { baseURL } from '../../utils/config/baseUrl';
 import { getDataFromAsyncStorage } from '../../utils/localStorage';
 import { setIsAuth, logOut } from '../slices/isAuthSlice';
-
-// Define interfaces for the API responses
-interface User {
-  _id: string;
-  email: string;
-  name: string;
-}
+import { IUser, IUserResponse } from '~/app/interfaces/interfaces';
 
 interface AuthResponse {
   accessToken: string;
   refreshToken: string;
-  data: User;
+  data: IUser;
 }
 
 interface SendDataArgs {
@@ -86,8 +80,9 @@ export const api = createApi({
   refetchOnMountOrArgChange: true,
   refetchOnReconnect: true,
   endpoints: (builder) => ({
-    getUser: builder.query<User, void>({
-      query: () => ``,
+    getUser: builder.query<IUserResponse, void>({
+      query: () => `user/`,
+      providesTags: ['User'],
     }),
     sendData: builder.mutation<void, SendDataArgs>({
       query: ({ url, data, type }) => ({
