@@ -54,7 +54,7 @@ export default function Map() {
 
   useEffect(() => {
     if (hasLocationPermission && location) {
-      setUserLocation(location);
+     setUserLocation(location);
     }
   }, [location, hasLocationPermission]);
 
@@ -77,6 +77,7 @@ export default function Map() {
       animationDuration: 2000,
     });
   };
+  
 
   const onMapError = () => setHasMapError(true);
   const onMapLoad = () => setIsMapReady(true);

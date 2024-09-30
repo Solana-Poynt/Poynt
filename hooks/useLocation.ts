@@ -4,6 +4,8 @@ import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestLocationPermission } from '~/utils/Permissions';
 const API_KEY = process.env.EXPO_APP_API_KEY;
+import * as Location from 'expo-location';
+const CACHE_DURATION = 30 * 60 * 1000;
 
 interface WeatherData {
   name: string;
@@ -19,11 +21,13 @@ interface WeatherData {
   pressure: number;
   uv: number;
   viskm: any;
+  gustkph: number;
   windchill: number;
   icon: string;
   humidity: number;
   cloud: number;
-  wind_mph: number;
+  windkph: number;
+  windmph: number;
   wind_dir: string;
 }
 
@@ -33,172 +37,167 @@ interface WeatherAnalysis {
   uvPrediction: string;
   windPrediction: string;
   visibilityPrediction: string;
+  extremePrediction: string;
 }
-
+interface WeatherState {
+  currentWeather: WeatherData | any;
+  location: [number, number] | null;
+  hasLocationPermission: boolean;
+  isLoading: boolean;
+  error: string | null;
+  userTime: string;
+}
 export const useWeatherInfo = () => {
-  const [location, setLocation] = useState<[number, number] | null>(null);
-  const [hasLocationPermission, setHasLocationPermission] = useState<boolean>(false);
-  const [currentWeather, setCurrentWeather] = useState<WeatherData | any>(null);
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [weatherState, setWeatherState] = useState<WeatherState>({
+    currentWeather: null,
+    location: null,
+    hasLocationPermission: false,
+    isLoading: true,
+    error: null,
+    userTime: '',
+  });
   const isMounted = useRef(true);
 
-  const getCurrentLocation = async (): Promise<[number, number] | null> => {
+  const getCurrentLocation = useCallback(async (): Promise<[number, number] | null> => {
     try {
-      const location = await locationManager.getLastKnownLocation();
-      if (location) {
-        return [location.coords.longitude, location.coords.latitude];
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Location permission not granted');
       }
-      return null;
+
+      const location = await Location.getCurrentPositionAsync({});
+      return [location.coords.longitude, location.coords.latitude];
     } catch (err) {
       console.error('Error fetching location:', err);
-      Alert.alert('Error', 'Could not retrieve current location.');
       return null;
-    }
-  };
-
-  const formatDate = (date: Date): string => {
-    const options: Intl.DateTimeFormatOptions = {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    };
-    return date.toLocaleDateString(undefined, options);
-  };
-
-  const fetchWeather = useCallback(async (lat: number, lng: number): Promise<WeatherData> => {
-    try {
-      const response = await fetch(
-        `http://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${lat},${lng}&aqi=no`
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      return {
-        name: data.location.name,
-        region: data.location.region,
-        country: data.location.country,
-        temp_c: data.current.temp_c,
-        feels_like: data.current.feelslike_c,
-        icon: data.current.condition.icon,
-        condition: data.current.condition.text,
-        humidity: data.current.humidity,
-        dewpoint: data.current.dewpoint_c,
-        heatindex: data.current.heatindex_c,
-        isday: data.current.is_day,
-        precip: data.current.precip_in,
-        pressure: data.current.pressure_mb,
-        uv: data.current.uv,
-        viskm: data.current.vis_km,
-        windchill: data.current.windchill_c,
-        cloud: data.current.cloud,
-        wind_mph: data.current.wind_mph,
-        wind_dir: data.current.wind_dir,
-      };
-    } catch (err) {
-      console.error('Error fetching weather:', err);
-      throw err;
     }
   }, []);
 
+  const formatDate = useCallback((date: Date): string => {
+    return date.toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+  }, []);
+
+  const fetchWeather = useCallback(async (lat: number, lng: number): Promise<WeatherData> => {
+    const response = await fetch(
+      `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${lat},${lng}&aqi=no`
+    );
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+
+    return {
+      name: data.location.name,
+      region: data.location.region,
+      country: data.location.country,
+      temp_c: data.current.temp_c,
+      feels_like: data.current.feelslike_c,
+      condition: data.current.condition.text,
+      dewpoint: data.current.dewpoint_c,
+      heatindex: data.current.heatindex_c,
+      isday: data.current.is_day,
+      precip: data.current.precip_mm,
+      pressure: data.current.pressure_mb,
+      uv: data.current.uv,
+      viskm: data.current.vis_km,
+      windchill: data.current.windchill_c,
+      icon: data.current.condition.icon,
+      humidity: data.current.humidity,
+      cloud: data.current.cloud,
+      windkph: data.current.wind_kph,
+      windmph: data.current.wind_mph,
+      wind_dir: data.current.wind_dir,
+      gustkph: data.current.gust_kph,
+    };
+  }, []);
+
   const loadWeatherData = useCallback(async () => {
+    setWeatherState((prev) => ({ ...prev, isLoading: true, error: null }));
+
     try {
-      setIsLoading(true);
-      setError(null);
-
-      const storedWeather = await AsyncStorage.getItem('weatherData');
-      const storedTimestamp = await AsyncStorage.getItem('weatherTimestamp');
-
-      if (storedWeather && storedTimestamp) {
-        const parsedWeather = JSON.parse(storedWeather);
-        const timestamp = parseInt(storedTimestamp, 10);
-        const now = Date.now();
-
-        // If stored data is less than 30 minutes old, use it
-        if (now - timestamp < 30 * 60 * 1000) {
-          setCurrentWeather(parsedWeather);
-          setIsLoading(false);
+      // Check for cached data
+      const cachedData = await AsyncStorage.getItem('weatherCache');
+      if (cachedData) {
+        const { timestamp, weather, location } = JSON.parse(cachedData);
+        // Check if cache is fresh
+        if (Date.now() - timestamp < CACHE_DURATION) {
+          setWeatherState((prev) => ({
+            ...prev,
+            hasLocationPermission: true,
+            currentWeather: weather,
+            location,
+            isLoading: false,
+            userTime: formatDate(new Date()),
+          }));
           return;
         }
       }
 
-      const permissionGranted: any = await requestLocationPermission();
-      setHasLocationPermission(permissionGranted);
+      // Fetch current location
+      const currentLocation = await getCurrentLocation();
+      if (!currentLocation) {
+        throw new Error('Unable to retrieve current location');
+      }
 
-      if (permissionGranted) {
-        const currentLocation = await getCurrentLocation();
-        if (currentLocation) {
-          setLocation(currentLocation);
-          const [lng, lat] = currentLocation.map((coord) => Number(coord.toFixed(6)));
-          const weatherData = await fetchWeather(lat, lng);
+      const [lng, lat] = currentLocation;
+      // Fetch weather data
+      const weatherData = await fetchWeather(lat, lng);
 
-          if (isMounted.current) {
-            setCurrentWeather(weatherData);
-            await AsyncStorage.setItem('weatherData', JSON.stringify(weatherData));
-            await AsyncStorage.setItem('weatherTimestamp', Date.now().toString());
-          }
-        } else {
-          throw new Error('Unable to retrieve current location');
-        }
-      } else {
-        throw new Error('Location permission denied');
+      if (isMounted.current) {
+        const newState = {
+          currentWeather: weatherData,
+          location: currentLocation,
+          hasLocationPermission: true,
+          isLoading: false,
+          error: null,
+          userTime: formatDate(new Date()),
+        };
+        setWeatherState(newState);
+
+        // Cache weather data
+        await AsyncStorage.setItem(
+          'weatherCache',
+          JSON.stringify({
+            timestamp: Date.now(),
+            weather: weatherData,
+            location: currentLocation,
+          })
+        );
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error loading weather data:', err);
       if (isMounted.current) {
-        setError('Could not fetch weather information');
-        Alert.alert('Error', 'Could not fetch weather information');
-      }
-    } finally {
-      if (isMounted.current) {
-        setIsLoading(false);
+        setWeatherState((prev) => ({
+          ...prev,
+          error: 'Could not fetch weather information',
+          isLoading: false,
+        }));
       }
     }
-  }, [fetchWeather]);
+  }, [fetchWeather, getCurrentLocation, formatDate]);
 
   useEffect(() => {
     loadWeatherData();
+    const dateInterval = setInterval(() => {
+      setWeatherState((prev) => ({ ...prev, userTime: formatDate(new Date()) }));
+    }, 3600000);
 
     return () => {
       isMounted.current = false;
+      clearInterval(dateInterval);
     };
-  }, [loadWeatherData]);
-
-  useEffect(() => {
-    const updateDate = () => {
-      const now = new Date();
-      setCurrentDate(now);
-
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
-      const timeUntilMidnight = tomorrow.getTime() - now.getTime();
-
-      setTimeout(updateDate, timeUntilMidnight);
-    };
-
-    updateDate();
-  }, []);
+  }, [loadWeatherData, formatDate]);
 
   const refreshWeather = useCallback(() => {
     loadWeatherData();
   }, [loadWeatherData]);
 
-  return {
-    currentWeather,
-    location,
-    hasLocationPermission,
-    isLoading,
-    error,
-    userTime: formatDate(currentDate),
-    refreshWeather,
-  };
+  return { ...weatherState, refreshWeather };
 };
 
 export const useWeatherAnalysis = (weatherData: WeatherData): WeatherAnalysis => {
@@ -207,17 +206,20 @@ export const useWeatherAnalysis = (weatherData: WeatherData): WeatherAnalysis =>
   const [uvPrediction, setUvPrediction] = useState<string>('');
   const [windPrediction, setWindPrediction] = useState<string>('');
   const [visibilityPrediction, setVisibilityPrediction] = useState<string>('');
+  const [extremePrediction, setExtremePrediction] = useState<string>('');
+
+  const { location } = useWeatherInfo();
 
   useEffect(() => {
-    if (!weatherData) {
-      return;
-    }
+    if (!weatherData) return;
+
     const {
       temp_c,
       feels_like,
       humidity,
       cloud,
-      wind_mph,
+      windmph,
+      windkph,
       dewpoint,
       heatindex,
       precip,
@@ -225,63 +227,118 @@ export const useWeatherAnalysis = (weatherData: WeatherData): WeatherAnalysis =>
       viskm,
       wind_dir,
       condition,
+      pressure,
+      gustkph,
+      country,
     } = weatherData;
 
-    // Combined Heat Analysis: Temp, Feels Like, Heat Index, Condition
-    if (feels_like >= 35 || heatindex >= 35) {
-      setHeatPrediction('Sunny and scorching!');
-    } else if (feels_like >= 29 && feels_like < 35) {
-      setHeatPrediction('Warm but cloudy');
-    } else if (temp_c >= 29 && feels_like < 35) {
-      setHeatPrediction('Clear skies and warm');
+    const [lng, lat] = location ?? [0, 0];
+
+    // Dynamic regional classification
+    const isHotRegion = (avgTemp: number): boolean => avgTemp > 25;
+    const isColdRegion = (avgTemp: number): boolean => avgTemp < 10;
+    // const isTropicalRegion = (): boolean => Math.abs(lat) < 23.5;
+
+    const avgTemp = (temp_c + feels_like) / 2;
+
+    const checkCondition = (keywords: string[]): boolean =>
+      keywords.some((keyword) => condition.toLowerCase().includes(keyword));
+
+    // Heat Analysis
+    if (heatindex >= 54) {
+      setHeatPrediction(checkCondition(['sunny', 'clear']) ? 'Extreme heat' : 'Heat danger');
+    } else if (heatindex >= 41) {
+      setHeatPrediction(checkCondition(['sunny', 'clear']) ? 'Very hot' : 'Heat risk');
+    } else if (heatindex >= 32) {
+      setHeatPrediction(checkCondition(['sunny', 'clear']) ? 'Hot' : 'Heat alert');
+    } else if (feels_like >= 35 || heatindex >= 27) {
+      setHeatPrediction(isHotRegion(avgTemp) ? 'Typical heat' : 'Warm');
+    } else if (temp_c >= 30) {
+      setHeatPrediction(checkCondition(['cloudy', 'overcast']) ? 'Warm cloudy' : 'Warm');
+    } else if (temp_c >= 20 && temp_c < 30) {
+      setHeatPrediction(checkCondition(['rain', 'drizzle']) ? 'Mild wet' : 'Mild');
+    } else if (temp_c >= 10 && temp_c < 20) {
+      setHeatPrediction(isColdRegion(avgTemp) ? 'Mild here' : 'Cool');
+    } else if (temp_c >= 0 && temp_c < 10) {
+      setHeatPrediction(isColdRegion(avgTemp) ? 'Typical cold' : 'Cold');
+    } else if (temp_c >= -10 && temp_c < 0) {
+      setHeatPrediction('Very cold');
     } else {
-      setHeatPrediction('Mild weather');
+      setHeatPrediction('Freezing');
     }
 
-    // Rain/Precipitation Analysis: Dewpoint, Humidity, Cloud Coverage, Condition
-    if (precip > 0 || condition.toLowerCase().includes('rain')) {
-      setRainPrediction('Possible rain');
-    } else if (
-      condition.toLowerCase().includes('drizzle') ||
-      condition.toLowerCase().includes('showers')
-    ) {
-      setRainPrediction('Light rain expected');
-    } else if (humidity >= 80 && dewpoint > 20 && condition.toLowerCase().includes('storm')) {
-      setRainPrediction('Thunderstorms expected');
-    } else if (humidity < 50 && cloud < 50 && condition.toLowerCase().includes('clear')) {
-      setRainPrediction('Clear skies');
-    } else if (humidity >= 50 && humidity < 80 && cloud >= 50) {
-      setRainPrediction('Possible light rain');
+    // Rain Analysis
+    if (precip > 50) {
+      setRainPrediction('Heavy rain');
+    } else if (precip > 10) {
+      setRainPrediction('Moderate rain');
+    } else if (precip > 0 || checkCondition(['rain', 'drizzle', 'showers'])) {
+      setRainPrediction('Light rain');
+    } else if (humidity >= 80 && dewpoint > 20 && checkCondition(['storm'])) {
+      setRainPrediction('Thunderstorms');
+    } else if (humidity >= 70 && cloud > 70) {
+      setRainPrediction('Rain likely');
+    } else if (humidity < 40 && cloud < 30) {
+      setRainPrediction('Dry');
     } else {
-      setRainPrediction('No rain expected');
+      setRainPrediction('No rain');
     }
 
     // UV Index Prediction
-    if (uv < 3) {
-      setUvPrediction('Low UV levels');
-    } else if (uv >= 3 && uv <= 5) {
-      setUvPrediction('Moderate UV Levels');
-    } else if (uv > 5) {
-      setUvPrediction('High UV levels');
+    if (uv >= 11) {
+      setUvPrediction('Extreme UV');
+    } else if (uv >= 8) {
+      setUvPrediction('Very high UV');
+    } else if (uv >= 6) {
+      setUvPrediction('High UV');
+    } else if (uv >= 3) {
+      setUvPrediction('Moderate UV');
+    } else {
+      setUvPrediction('Low UV');
     }
 
-    // Wind Prediction: Wind Speed, Wind Direction
-    if (wind_mph > 20) {
-      setWindPrediction(` Strong winds`);
-    } else if (wind_mph > 10) {
-      setWindPrediction(`Moderate winds`);
+    // Wind Prediction
+    const windSpeed = Math.max(windkph, gustkph);
+    if (windSpeed >= 118) {
+      setWindPrediction(`Hurricane ${wind_dir}`);
+    } else if (windSpeed >= 89) {
+      setWindPrediction(`Storm ${wind_dir}`);
+    } else if (windSpeed >= 62) {
+      setWindPrediction(`Gale ${wind_dir}`);
+    } else if (windSpeed >= 39) {
+      setWindPrediction(`Strong ${wind_dir}`);
+    } else if (windSpeed >= 20) {
+      setWindPrediction(`Breezy ${wind_dir}`);
     } else {
-      setWindPrediction(`Gentle winds`);
+      setWindPrediction(`Light ${wind_dir}`);
     }
 
-    // Visibility Prediction: Visibility and General Weather Condition
-    if (viskm < 1) {
-      setVisibilityPrediction('Low visibility');
-    } else if (viskm >= 1 && viskm <= 5) {
-      setVisibilityPrediction('Moderate visibility');
+    // Visibility Prediction
+    if (viskm < 0.05) {
+      setVisibilityPrediction('Dense fog');
+    } else if (viskm < 0.5) {
+      setVisibilityPrediction('Thick fog');
+    } else if (viskm < 1) {
+      setVisibilityPrediction('Fog');
+    } else if (viskm < 2) {
+      setVisibilityPrediction('Poor');
+    } else if (viskm < 5) {
+      setVisibilityPrediction('Moderate');
     } else {
-      setVisibilityPrediction('Clear visibility.');
+      setVisibilityPrediction('Good');
     }
+
+    // Extreme Weather Prediction
+    const extremeConditions = [];
+    if (heatindex >= 54) extremeConditions.push('Extreme heat');
+    if (temp_c <= -20) extremeConditions.push('Extreme cold');
+    if (windSpeed >= 118) extremeConditions.push('Hurricane');
+    if (precip > 50) extremeConditions.push('Heavy rain');
+    if (viskm < 0.05) extremeConditions.push('Dense fog');
+    if (checkCondition(['tornado', 'cyclone'])) extremeConditions.push('Tornado risk');
+    if (pressure < 950) extremeConditions.push('Very low pressure');
+
+    setExtremePrediction(extremeConditions.length > 0 ? extremeConditions.join(', ') : 'None');
   }, [weatherData]);
 
   return {
@@ -290,5 +347,6 @@ export const useWeatherAnalysis = (weatherData: WeatherData): WeatherAnalysis =>
     uvPrediction,
     windPrediction,
     visibilityPrediction,
+    extremePrediction,
   };
 };
