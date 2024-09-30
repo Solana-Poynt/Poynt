@@ -32,3 +32,31 @@ export interface IButton {
     | '/interfaces/interfaces'
     | '/screens/login';
 }
+
+export interface IUserResponse extends IUser {
+  data: IUser;
+  message: string;
+  success: boolean;
+}
+export interface IUser extends ILocation {
+  _id?: string;
+  password?: string;
+  email: string;
+  name?: string;
+  referralId?: string;
+  referrals?: number;
+  savedLocations?: ILocation[];
+  recentSearchs?: string[];
+  poynts?: number;
+  tier?: number;
+  googleId?: string;
+  OTP?: number | string;
+  otpExpiresAt?: number;
+  isEmailVerified?: boolean;
+  createdAt?: string;
+}
+
+export interface ILocation {
+  locationName?: string;
+  meridian?: string;
+}

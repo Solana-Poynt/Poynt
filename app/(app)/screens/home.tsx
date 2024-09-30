@@ -7,6 +7,8 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useWeatherInfo, useWeatherAnalysis } from '~/hooks/useLocation';
 import PulsingLoadingCard from '~/components/Loader';
+import { useGetUserQuery } from '../../../store/api/api';
+import { IUser } from '~/app/interfaces/interfaces';
 
 const Home: React.FC = () => {
   const { currentWeather, isLoading, userTime, refreshWeather, error } = useWeatherInfo();
@@ -26,6 +28,12 @@ const Home: React.FC = () => {
 
   const toggleModal = () => setModalVisible(!modalVisible);
 
+  //MAKE CALL TO BACKEND TO FTECH USER DATA
+  const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
+  const user: IUser | undefined = userData && userData?.data;
+  //YOU CAN THEN FIND ALL USERS DATA AND  USE ANYONE YOU WANT, LOG USERDATA TO YOUR CONSOLE TO SEE THE DATA STRUCTURE AND HOW YOUC CAN ACCESS THE PROPERTIES YOU WANT.
+  //CHECK LINE 47 TO SEE HOW I AM GETTING THE USERS NAME FROM THE DATA STRUCTURE
+
   return (
     <>
       <Stack.Screen options={{ title: 'Onboard', headerShown: false }} />
@@ -42,7 +50,7 @@ const Home: React.FC = () => {
             <Ionicons name="notifications" size={24} color="" />
           </TouchableOpacity> */}
         </View>
-        <Text style={styles.greeting}>Hello, Daniel</Text>
+        <Text style={styles.greeting}>Hello, {user?.name && user?.name.toUpperCase()}</Text>
 
         <View style={styles.timerContainer}>
           <Text>{userTime}</Text>
