@@ -4,6 +4,8 @@ import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestLocationPermission } from '~/utils/Permissions';
 
+const API_KEY = process.env.EXPO_APP_API_KEY;
+
 import * as Location from 'expo-location';
 const CACHE_DURATION = 30 * 60 * 1000;
 

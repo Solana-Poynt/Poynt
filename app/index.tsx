@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Button,
   View,
@@ -13,10 +13,31 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import AppButton from '~/components/appButton';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage.js';
 
 function OnBoardScreen() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  async function saveUserHasOpenedApp() {
+    const userHasOpenedApp = await saveDataToAsyncStorage('userHasOpenedApp', true);
+  }
+  saveUserHasOpenedApp();
+  async function checkIfUserHasOpenedApp() {
+    const userHasOpenedApp = await getDataFromAsyncStorage('userHasOpenedApp');
+    const refreshToken = await getDataFromAsyncStorage('refreshToken');
+
+    if (userHasOpenedApp) {
+      router.push({ pathname: '/screens/login' });
+    }
+  }
+
+  useEffect(() => {
+    const checkUser = async () => {
+      await checkIfUserHasOpenedApp();
+    };
+    checkUser();
+  }, []);
 
   const onboardData = [
     {
