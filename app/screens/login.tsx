@@ -95,17 +95,21 @@ function LoginScreen() {
   }
 
   //CHECK IF USER IS AUTHENTICATED
-  // const isAuthenticated = useSelector((state: any) => state.isAuth.isAuth);
-  const isAuthenticated = useSelector((state: RootState) => state.isAuth.isAuth);
-  async function getData() {
-    const email = await getDataFromAsyncStorage('email');
-  }
-  getData();
+  // const isAuthenticated = useSelector((state: RootState) => state.isAuth.isAuth);
+  async function isAuthenticated() {
+    const accessToken = await getDataFromAsyncStorage('accessToken');
+    const refreshToken = await getDataFromAsyncStorage('refreshToken');
 
-  useEffect(() => {
-    if (isAuthenticated) {
+    if (accessToken && refreshToken) {
       router.push({ pathname: '/screens/home' });
     }
+  }
+
+  useEffect(() => {
+    const checkUserAuth = async () => {
+      await isAuthenticated();
+    };
+    checkUserAuth();
   }, []);
 
   return (
