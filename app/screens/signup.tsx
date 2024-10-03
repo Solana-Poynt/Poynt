@@ -29,6 +29,7 @@ function SignUpScreen() {
     name: '',
     email: '',
     password: '',
+    referralId: '',
     confirmPassword: '',
   });
 
@@ -90,7 +91,7 @@ function SignUpScreen() {
             <Image source={require('../../assets/user.png')} resizeMode="contain" />
             <TextInput
               style={styles.inputElements}
-              placeholder="Name"
+              placeholder="Username"
               placeholderTextColor={'gray'}
               value={data.name} // Bind state
               onChangeText={(val) =>
@@ -140,6 +141,21 @@ function SignUpScreen() {
               onChangeText={(val) =>
                 setData((prev) => {
                   return { ...prev, confirmPassword: val };
+                })
+              }
+            />
+          </View>
+          <View style={styles.inputContainers}>
+            <Image source={require('../../assets/user.png')} resizeMode="contain" />
+            <TextInput
+              style={styles.inputElements}
+              placeholder="Referrer"
+              placeholderTextColor={'gray'}
+              secureTextEntry
+              value={data.referralId} // Bind state
+              onChangeText={(val) =>
+                setData((prev) => {
+                  return { ...prev, referralId: val };
                 })
               }
             />
