@@ -13,10 +13,7 @@ import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Mapbox from '@rnmapbox/maps';
-
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
-
-const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_CODE || '';
 
 const FOURSQUARE_API_KEY = 'fsq3Gvr/n2MKj0SfyGug4mtRH6gtgz6kBbSYjGG61JKbnj4=';
 

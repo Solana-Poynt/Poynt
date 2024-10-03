@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Stack } from 'expo-router';
-import { StyleSheet, View, Image } from 'react-native';
-import Map from '~/components/Map';
-import Mapbox from '@rnmapbox/maps';
+import { StyleSheet, View } from 'react-native';
+import Map from '~/components/Map'
 
 const Navigate: React.FC = () => {
   return (

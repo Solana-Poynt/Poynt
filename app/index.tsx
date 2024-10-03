@@ -15,7 +15,6 @@ import AppButton from '~/components/appButton';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
 function OnBoardScreen() {
-  const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const onboardData = [

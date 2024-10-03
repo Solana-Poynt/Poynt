@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Button,
   View,
   Text,
   Platform,
@@ -37,7 +36,7 @@ function LoginScreen() {
   });
 
   //MAKE API CALL
-  const [signIn, { isLoading, reset }] = useSendDataMutation();
+  const [signIn, { isLoading }] = useSendDataMutation();
   async function login() {
     const isEmpty = areValuesEmpty(data);
     if (isEmpty) {

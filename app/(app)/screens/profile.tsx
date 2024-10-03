@@ -1,4 +1,3 @@
-import React, { useEffect, useState } from 'react';
 import { Platform, StatusBar, StyleSheet, View, Image, Text, TouchableOpacity } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,7 +11,7 @@ function ProfileScreen() {
   const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
   const user: IUser | undefined = userData && userData?.data;
 
-  const listItems = [
+  const listItems: any = [
     {
       name: 'My Places',
       path: '',

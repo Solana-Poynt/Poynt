@@ -13,7 +13,7 @@ import IconCircleProgress from '~/components/icons/icons';
 import { IUser } from '~/app/interfaces/interfaces';
 
 const Home: React.FC = () => {
-  const { currentWeather, isLoading, userTime, refreshWeather, error } = useWeatherInfo();
+  const { currentWeather, isLoading, userTime, refreshWeather } = useWeatherInfo();
   const {
     heatPrediction,
     rainPrediction,
@@ -28,12 +28,13 @@ const Home: React.FC = () => {
     ? `${currentWeather.name}, ${currentWeather.region},`
     : 'Location unavailable';
 
-  const toggleModal = () => setModalVisible(!modalVisible);
+  const toggleModal = () => {
+    setModalVisible(!modalVisible);
+  };
 
   //MAKE CALL TO BACKEND TO FTECH USER DATA
   const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
   const user: IUser | undefined = userData && userData?.data;
- 
 
   return (
     <>

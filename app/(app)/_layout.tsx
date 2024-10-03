@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useFonts } from 'expo-font';
 import BottomNav from '~/components/BottomNav';
 import { View, StyleSheet } from 'react-native';
 // import AppLoading from 'expo-app-loading';

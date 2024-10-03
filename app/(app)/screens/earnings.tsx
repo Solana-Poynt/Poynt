@@ -1,4 +1,3 @@
-import React, { useEffect, useState } from 'react';
 import { Platform, StatusBar, StyleSheet, View, Image, Text, TouchableOpacity } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -2,10 +2,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { TouchableOpacity, Text, StyleSheet, View, Modal } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import CircularRating from './icons/rating';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import WeatherGrid from './icons/weatherForcast';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 interface Place {
   id: string;
@@ -65,7 +63,7 @@ const ViewPlace: React.FC<ViewPlaceProps> = ({ selectedPlace, handleCancel }) =>
     </View>
   );
 
-  const rating: number = 5;
+  
 
   return (
     <BottomSheet

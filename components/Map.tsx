@@ -1,25 +1,7 @@
 import { Text } from 'react-native';
-import Mapbox, {
-  Camera,
-  LocationPuck,
-  locationManager,
-  MapView,
-  ShapeSource,
-  SymbolLayer,
-  Images,
-} from '@rnmapbox/maps';
+import Mapbox, { Camera, LocationPuck, MapView } from '@rnmapbox/maps';
 import { useState, useRef, useEffect } from 'react';
-import {
-  StyleSheet,
-  View,
-  TouchableOpacity,
-  Alert,
-  SafeAreaView,
-  ActivityIndicator,
-  StatusBar,
-  Button,
-} from 'react-native';
-import { requestLocationPermission } from '~/utils/Permissions';
+import { StyleSheet, View } from 'react-native';
 import MapboxSearch from './SearchBar';
 import SelectedPlace from './SelectedPlace';
 import ViewPlace from './ViewPlace';
@@ -54,7 +36,7 @@ export default function Map() {
 
   useEffect(() => {
     if (hasLocationPermission && location) {
-     setUserLocation(location);
+      setUserLocation(location);
     }
   }, [location, hasLocationPermission]);
 
@@ -77,7 +59,6 @@ export default function Map() {
       animationDuration: 2000,
     });
   };
-  
 
   const onMapError = () => setHasMapError(true);
   const onMapLoad = () => setIsMapReady(true);

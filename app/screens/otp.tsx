@@ -29,7 +29,7 @@ function OTPScreen() {
     show: false,
   });
 
-  const [userAuth, { isLoading, reset }] = useSendDataMutation();
+  const [userAuth, { isLoading }] = useSendDataMutation();
   async function verifyOTP() {
     const isDataEmpty = areValuesEmpty(userData);
     if (isDataEmpty) {
