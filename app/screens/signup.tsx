@@ -146,9 +146,10 @@ function SignUpScreen() {
             />
           </View>
           <View style={styles.inputContainers}>
+            <Image source={require('../../assets/user.png')} resizeMode="contain" />
             <TextInput
               style={styles.inputElements}
-              placeholder="Referrer Id"
+              placeholder="Referrer"
               placeholderTextColor={'gray'}
               secureTextEntry
               value={data.referralId} // Bind state
