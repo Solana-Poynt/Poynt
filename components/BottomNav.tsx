@@ -1,35 +1,58 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { getDataFromAsyncStorage } from '~/utils/localStorage.js';
 
 export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const navItems = [
-    {
-      name: 'Home',
-      path: '/screens/home',
-      icon: 'home',
-    },
-    {
-      name: 'Navigate',
-      path: '/screens/navigate',
-      icon: 'location-sharp',
-    },
-    {
-      name: 'Contribute',
-      path: '/screens/settings',
-      icon: 'extension-puzzle-sharp',
-    },
-    {
-      name: 'Profile',
-      path: '/screens/profile',
-      icon: 'person',
-    },
-    // Add this if you have a settings screen
-  ];
+  const [navItems, setNavItems] = useState<any>([]);
+
+  // Function to fetch the role from AsyncStorage
+  const getUserRole = async () => {
+    try {
+      const role = await getDataFromAsyncStorage('role');
+      console.log(role); // For debugging
+
+      return role === 'driver' ? '/screens/contributeDriver' : '/screens/contributeUser';
+    } catch (error) {
+      console.error('Error fetching role from AsyncStorage:', error);
+      return '/screens/contributeUser'; // Default route if an error occurs
+    }
+  };
+
+  // Fetch role and set navigation items after the component mounts
+  useEffect(() => {
+    const setupNavigation = async () => {
+      const userPath = await getUserRole();
+      setNavItems([
+        {
+          name: 'Home',
+          path: '/screens/home',
+          icon: 'home',
+        },
+        {
+          name: 'Navigate',
+          path: '/screens/navigate',
+          icon: 'location-sharp',
+        },
+        {
+          name: 'Contribute',
+          path: userPath, // Dynamically set the path based on user role
+          icon: 'extension-puzzle-sharp',
+        },
+        {
+          name: 'Profile',
+          path: '/screens/profile',
+          icon: 'person',
+        },
+      ]);
+    };
+
+    setupNavigation(); // Call the async function to set navigation
+  }, []);
 
   return (
     <View style={styles.navContainer}>

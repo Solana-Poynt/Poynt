@@ -82,6 +82,7 @@ function LoginScreen() {
       await saveDataToAsyncStorage('id', user._id);
       await saveDataToAsyncStorage('email', user.email);
       await saveDataToAsyncStorage('name', user.name);
+      await saveDataToAsyncStorage('role', user.role);
       router.push({ pathname: '/screens/home' });
     } else {
       setNotification({
