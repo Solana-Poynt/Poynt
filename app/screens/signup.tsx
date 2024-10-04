@@ -9,6 +9,7 @@ import {
   TextInput,
   Image,
   TouchableOpacity,
+  ScrollView, // Import ScrollView
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import BackButton from '~/components/backButton';
@@ -37,7 +38,7 @@ function SignUpScreen() {
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const roles = ['Driver', 'User'];
+  const roles = ['driver', 'user'];
 
   // dropdown
   const toggleDropdown = () => {
@@ -106,164 +107,168 @@ function SignUpScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Signup', headerShown: false }} />
-      <SafeAreaView style={styles.container}>
-        <View style={styles.backBtn}>
-          <BackButton link={'/'} />
-        </View>
-        <Text style={styles.title}>Create Account</Text>
-        <View style={styles.content}>
-          <View style={styles.inputContainers}>
-            <Image source={require('../../assets/user.png')} resizeMode="contain" />
-            <TextInput
-              style={styles.inputElements}
-              placeholder="Username"
-              placeholderTextColor={'gray'}
-              value={data.name} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, name: val };
-                })
-              }
-            />
+      {/* Add ScrollView as the parent */}
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent} // Ensures paddingBottom
+        keyboardShouldPersistTaps="handled">
+        <SafeAreaView style={styles.container}>
+          <View style={styles.backBtn}>
+            <BackButton link={'/'} />
           </View>
-          <View style={styles.inputContainers}>
-            <Image source={require('../../assets/mail.png')} resizeMode="contain" />
-            <TextInput
-              style={styles.inputElements}
-              placeholder="Email address"
-              placeholderTextColor={'gray'}
-              value={data.email} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, email: val };
-                })
-              }
-            />
-          </View>
+          <Text style={styles.title}>Create Account</Text>
 
-          {/* dropdown  */}
-
-          <View style={styles.inputContainer}>
-            <TouchableOpacity style={styles.dropdown} onPress={toggleDropdown}>
+          <View style={styles.content}>
+            <View style={styles.inputContainers}>
               <Image source={require('../../assets/user.png')} resizeMode="contain" />
-              <Text style={styles.selectedText}>{data.role || 'Select Role'}</Text>
-              <Ionicons
-                name={isDropdownOpen ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="grey"
+              <TextInput
+                style={styles.inputElements}
+                placeholder="Username"
+                placeholderTextColor={'gray'}
+                value={data.name} // Bind state
+                onChangeText={(val) =>
+                  setData((prev) => {
+                    return { ...prev, name: val };
+                  })
+                }
               />
+            </View>
+            <View style={styles.inputContainers}>
+              <Image source={require('../../assets/mail.png')} resizeMode="contain" />
+              <TextInput
+                style={styles.inputElements}
+                placeholder="Email address"
+                placeholderTextColor={'gray'}
+                value={data.email} // Bind state
+                onChangeText={(val) =>
+                  setData((prev) => {
+                    return { ...prev, email: val };
+                  })
+                }
+              />
+            </View>
+
+            {/* dropdown */}
+            <View style={styles.inputContainer}>
+              <TouchableOpacity style={styles.dropdown} onPress={toggleDropdown}>
+                <Image source={require('../../assets/user.png')} resizeMode="contain" />
+                <Text style={styles.selectedText}>{data.role || 'Select Role'}</Text>
+                <Ionicons
+                  name={isDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={24}
+                  color="grey"
+                />
+              </TouchableOpacity>
+
+              {isDropdownOpen && (
+                <View style={styles.dropdownList}>
+                  {roles.map((role, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.dropdownItem}
+                      onPress={() => handleSelection(role)}>
+                      <Text style={styles.dropdownItemText}>{role}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.inputContainers}>
+              <Image source={require('../../assets/key.png')} resizeMode="contain" />
+              <TextInput
+                style={styles.inputElements}
+                placeholder="Password"
+                placeholderTextColor={'gray'}
+                secureTextEntry
+                value={data.password} // Bind state
+                onChangeText={(val) =>
+                  setData((prev) => {
+                    return { ...prev, password: val };
+                  })
+                }
+              />
+            </View>
+            <View style={styles.inputContainers}>
+              <Image source={require('../../assets/key.png')} resizeMode="contain" />
+              <TextInput
+                style={styles.inputElements}
+                placeholder="Repeat Password"
+                placeholderTextColor={'gray'}
+                secureTextEntry
+                value={data.confirmPassword} // Bind state
+                onChangeText={(val) =>
+                  setData((prev) => {
+                    return { ...prev, confirmPassword: val };
+                  })
+                }
+              />
+            </View>
+            <View style={styles.inputContainers}>
+              <Image source={require('../../assets/user.png')} resizeMode="contain" />
+              <TextInput
+                style={styles.inputElements}
+                placeholder="Referrer"
+                placeholderTextColor={'gray'}
+                secureTextEntry
+                value={data.referralId} // Bind state
+                onChangeText={(val) =>
+                  setData((prev) => {
+                    return { ...prev, referralId: val };
+                  })
+                }
+              />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Image source={require('../../assets/check-circle.png')} resizeMode="contain" />
+              <Text style={styles.terms}>Agree with terms and conditions</Text>
+            </View>
+          </View>
+
+          <View style={styles.buttonContainers}>
+            <AppButton
+              title={isLoading ? 'Loading...' : 'Create Account'}
+              color={'Dark'}
+              handleClick={
+                isLoading
+                  ? function () {
+                      return '';
+                    }
+                  : createAccount
+              }
+            />
+            <AppButton title={'Sign up with Google'} color={'Light'} image={'google'} />
+          </View>
+
+          <View
+            style={{
+              width: '100%',
+              flexDirection: 'row',
+              gap: 5,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: 30,
+            }}>
+            <Text style={[styles.terms, { color: '#A2A2A2' }]}>Already have an account?</Text>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/screens/login' })}>
+              <Text style={styles.terms}>Login</Text>
             </TouchableOpacity>
-
-            {isDropdownOpen && (
-              <View style={styles.dropdownList}>
-                {roles.map((role, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.dropdownItem}
-                    onPress={() => handleSelection(role)}>
-                    <Text style={styles.dropdownItemText}>{role}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
           </View>
 
-          <View style={styles.inputContainers}>
-            <Image source={require('../../assets/key.png')} resizeMode="contain" />
-            <TextInput
-              style={styles.inputElements}
-              placeholder="Password"
-              placeholderTextColor={'gray'}
-              secureTextEntry
-              value={data.password} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, password: val };
-                })
-              }
+          {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
+          {notification.show ? (
+            <Notification
+              status={notification.status}
+              message={notification.message}
+              switchShowOff={() => {
+                setNotification((prev) => {
+                  return { ...prev, show: false };
+                });
+              }}
             />
-          </View>
-          <View style={styles.inputContainers}>
-            <Image source={require('../../assets/key.png')} resizeMode="contain" />
-            <TextInput
-              style={styles.inputElements}
-              placeholder="Repeat Password"
-              placeholderTextColor={'gray'}
-              secureTextEntry
-              value={data.confirmPassword} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, confirmPassword: val };
-                })
-              }
-            />
-          </View>
-          <View style={styles.inputContainers}>
-            <Image source={require('../../assets/user.png')} resizeMode="contain" />
-            <TextInput
-              style={styles.inputElements}
-              placeholder="Referrer"
-              placeholderTextColor={'gray'}
-              secureTextEntry
-              value={data.referralId} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, referralId: val };
-                })
-              }
-            />
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Image source={require('../../assets/check-circle.png')} resizeMode="contain" />
-            <Text style={styles.terms}>Agree with terms and conditions</Text>
-          </View>
-        </View>
-
-        <View style={styles.buttonContainers}>
-          <AppButton
-            title={isLoading ? 'Loading...' : 'Create Account'}
-            color={'Dark'}
-            handleClick={
-              isLoading
-                ? function () {
-                    return '';
-                  }
-                : createAccount
-            }
-          />
-          <AppButton title={'Sign up with Google'} color={'Light'} image={'google'} />
-        </View>
-
-        <View
-          style={{
-            width: '100%',
-            flexDirection: 'row',
-            gap: 5,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: 30,
-          }}>
-          <Text style={[styles.terms, { color: '#A2A2A2' }]}>Already have an account?</Text>
-          <TouchableOpacity onPress={() => router.push({ pathname: '/screens/login' })}>
-            <Text style={styles.terms}>Login</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
-        {notification.show ? (
-          <Notification
-            status={notification.status}
-            message={notification.message}
-            switchShowOff={() => {
-              setNotification((prev) => {
-                return { ...prev, show: false };
-              });
-            }}
-          />
-        ) : (
-          ''
-        )}
-      </SafeAreaView>
+          ) : null}
+        </SafeAreaView>
+      </ScrollView>
     </>
   );
 }
@@ -279,7 +284,13 @@ const styles = StyleSheet.create({
     paddingLeft: 20,
     paddingRight: 20,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    position: 'relative',
+  },
+  scrollContainer: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  scrollContent: {
+    paddingBottom: 40, // Padding at the bottom for extra spacing
   },
   backBtn: {
     width: '100%',
@@ -324,7 +335,6 @@ const styles = StyleSheet.create({
     fontStyle: 'normal',
     fontWeight: '400',
     color: '#B71C1C',
-    // width: '100%',
   },
   buttonContainers: {
     width: '100%',

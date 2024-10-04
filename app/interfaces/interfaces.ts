@@ -49,6 +49,7 @@ export interface IUser extends ILocation {
   recentSearchs?: string[];
   poynts?: number;
   tier?: number;
+  role?: string;
   googleId?: string;
   OTP?: number | string;
   otpExpiresAt?: number;
