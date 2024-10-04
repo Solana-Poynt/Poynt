@@ -23,6 +23,7 @@ interface Place {
 
 export default function Map() {
   const [isMapReady, setIsMapReady] = useState<boolean>(false);
+  const [isRendered, setIsRendered] = useState<boolean>(false);
   const [hasMapError, setHasMapError] = useState<boolean>(false);
   const [userLocation, setUserLocation] = useState<[number, number] | number[]>();
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -39,6 +40,10 @@ export default function Map() {
       setUserLocation(location);
     }
   }, [location, hasLocationPermission]);
+
+  useEffect(() => {
+    setIsRendered(true);
+  }, []);
 
   const handlePlaceSelect = (place: Place) => {
     setSelectedPlace(place);
@@ -112,7 +117,11 @@ export default function Map() {
       {/* {userLocation && <Center userLocation={userLocation} onCenterSelect={handleCenterSelect} />} */}
 
       {userLocation && (
-        <MapboxSearch userLocation={userLocation} onPlaceSelect={handlePlaceSelect} />
+        <MapboxSearch
+          userLocation={userLocation}
+          onPlaceSelect={handlePlaceSelect}
+          mapReady={isRendered}
+        />
       )}
       {showPlaceDetails && selectedPlace && (
         <ViewPlace selectedPlace={selectedPlace} handleCancel={handleCancel} />

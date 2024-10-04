@@ -3,9 +3,25 @@ import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGetUserQuery } from '../../../store/api/api';
 import { IUser } from '~/app/interfaces/interfaces';
+import { useDispatch } from 'react-redux';
+import { logOut } from '~/store/slices/isAuthSlice';
+import { AppDispatch } from '~/store/store';
 
 function ProfileScreen() {
   const router = useRouter();
+
+  const dispatch = useDispatch<AppDispatch>();
+  async function logout() {
+    try {
+      // Clear auth state in Redux
+      dispatch(logOut());
+
+      // Redirect to login screen
+      router.push({ pathname: '/screens/login' });
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  }
 
   //MAKE CALL TO BACKEND TO FTECH USER DATA
   const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
@@ -32,6 +48,10 @@ function ProfileScreen() {
       name: 'Incognito Mode',
       path: '',
     },
+    {
+      name: 'Logout',
+      path: '',
+    },
   ];
 
   const getIcon = (image: string) => {
@@ -45,6 +65,8 @@ function ProfileScreen() {
             ? require('../../../assets/bell.png')
             : image === 'Incognito Mode'
               ? require('../../../assets/incognito.png')
+              : image === 'Logout'
+                ? require('../../../assets/previous.png')
               : '';
   };
 
@@ -98,8 +120,7 @@ function ProfileScreen() {
           {listItems.map((item: any) => (
             <TouchableOpacity
               key={item.name}
-              //   onPress={() => router.push(item.path)}
-              onPress={() => {}}
+              onPress={item.name === 'Logout' ? logout : () => {}}
               style={styles.listItem}>
               <Image source={getIcon(item.name)} />
               <Text style={styles.listItemText}>{item.name}</Text>

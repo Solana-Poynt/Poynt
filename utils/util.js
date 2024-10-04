@@ -4,7 +4,7 @@ export const areValuesEmpty = (obj) => {
 };
 
 //VALIDATE INPUTS
-export const validateRegistration = (email, password, confirmPassword) => {
+export const validateRegistration = (email, password, role,  confirmPassword) => {
   // Email validation using a regular expression
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const isEmailValid = emailRegex.test(email);
@@ -15,6 +15,12 @@ export const validateRegistration = (email, password, confirmPassword) => {
   if (email !== undefined && isEmailValid === false) {
     return (message = 'Email is invalid');
   }
+
+
+  // // Check  if role is provided
+  // if (role !== undefined && role == driver) {
+  //   return (message = 'Email is invalid');
+  // }
 
   // Check password and confirm password only if both are provided
   if (password !== undefined) {

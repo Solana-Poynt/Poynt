@@ -17,26 +17,29 @@ import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localSt
 
 function OnBoardScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const router = useRouter();
 
-  async function saveUserHasOpenedApp() {
-    const userHasOpenedApp = await saveDataToAsyncStorage('userHasOpenedApp', true);
-  }
-  saveUserHasOpenedApp();
-  async function checkIfUserHasOpenedApp() {
+  useEffect(() => {
+    checkUserStatus();
+  }, []);
+
+  async function checkUserStatus() {
     const userHasOpenedApp = await getDataFromAsyncStorage('userHasOpenedApp');
     const refreshToken = await getDataFromAsyncStorage('refreshToken');
 
-    if (userHasOpenedApp) {
-      router.push({ pathname: '/screens/login' });
+    if (refreshToken) {
+      // User is logged in, redirect to home
+      router.replace('/screens/home');
+    } else if (userHasOpenedApp) {
+      // User has seen onboarding but not logged in, redirect to login
+      router.replace('/screens/login');
+    } else {
+      // New user, show onboarding
+      setShowOnboarding(true);
+      saveDataToAsyncStorage('userHasOpenedApp', true);
     }
   }
-
-  useEffect(() => {
-    const checkUser = async () => {
-      await checkIfUserHasOpenedApp();
-    };
-    checkUser();
-  }, []);
 
   const onboardData = [
     {
@@ -85,6 +88,11 @@ function OnBoardScreen() {
       key={index}
       style={[styles.circle, index === currentIndex ? styles.filled : styles.empty]}></View>
   ));
+
+  if (!showOnboarding) {
+    // Return null while checking user status
+    return null;
+  }
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -88,7 +88,7 @@ const Home: React.FC = () => {
                 </View>
                 <View style={styles.otherInfo}>
                   <View>
-                    <Text style={styles.traffic}>Slight Traffic</Text>
+                    <Text style={styles.traffic}></Text>
                   </View>
                 </View>
               </View>
@@ -133,35 +133,27 @@ const Home: React.FC = () => {
         <View
           style={{
             flexDirection: 'row',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             alignContent: 'center',
-            marginTop: 12,
+            marginTop: 2,
           }}>
-          <Text style={styles.sectionTitle}>Your places</Text>
           <TouchableOpacity onPress={refreshWeather} style={{}}>
             <Ionicons name="refresh-circle" size={32} color="#A71919" />
           </TouchableOpacity>
         </View>
 
         {/* Places And all  */}
-        <View style={{ marginBottom: 16 }}>
+        <View style={{ marginBottom: 16, marginTop: 32 }}>
           <View style={styles.savedPlace}>
             <View style={styles.addPlace}>
-              <View
+              <Ionicons name="car-sport" size={22} color="black" />
+              <Text
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
+                  fontSize: 16,
+                  fontWeight: '700',
                 }}>
-                <AntDesign name="questioncircle" size={25} color="#b8b8b8" />
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: '600',
-                  }}>
-                  Add Home Address
-                </Text>
-              </View>
+                Ready to go?
+              </Text>
 
               <View
                 style={{
@@ -171,67 +163,22 @@ const Home: React.FC = () => {
                   borderColor: '#eeeeee',
                   backgroundColor: '#eeeeee',
                 }}>
-                <Ionicons name="add-sharp" size={24} color="black" />
+                <TouchableOpacity onPress={() => router.push('/screens/navigate')}>
+                  <Ionicons name="arrow-forward" size={24} color="black" />
+                </TouchableOpacity>
               </View>
             </View>
-            <View
-              style={{
-                flexDirection: 'row',
-                width: '100%',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                paddingHorizontal: 4,
-              }}>
-              <Text style={styles.placeText}>Distance: __km</Text>
-              <View
+            <View>
+              <Text
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
+                  fontSize: 13,
+                  fontWeight: '500',
                 }}>
-                <MaterialCommunityIcons name="weather-fog" size={24} color="orange" />
-                <Text>__°C</Text>
-              </View>
+                Ride Smart, Save Big with Poynt!
+              </Text>
             </View>
+
             {/* ////////////////////// */}
-            <View
-              style={{
-                flexDirection: 'row',
-                width: '100%',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                paddingHorizontal: 4,
-                marginVertical: 6,
-              }}>
-              <View style={styles.placeIcons}>
-                <IconCircleProgress
-                  progress={100}
-                  icon={<Ionicons name="car-sport" size={22} color="black" />}
-                />
-                <Text style={styles.placeText}>0hrs 00m</Text>
-              </View>
-              <View style={styles.placeIcons}>
-                <IconCircleProgress
-                  progress={100}
-                  icon={<MaterialCommunityIcons name="motorbike" size={22} color="black" />}
-                />
-                <Text style={styles.placeText}>0hrs 00m</Text>
-              </View>
-              <View style={styles.placeIcons}>
-                <IconCircleProgress
-                  progress={100}
-                  icon={<MaterialIcons name="directions-bike" size={22} color="black" />}
-                />
-                <Text style={styles.placeText}>0hrs 00m</Text>
-              </View>
-              <View style={styles.placeIcons}>
-                <IconCircleProgress
-                  progress={100}
-                  icon={<MaterialCommunityIcons name="walk" size={22} color="black" />}
-                />
-                <Text style={styles.placeText}>0hrs 00m</Text>
-              </View>
-            </View>
           </View>
           <View style={styles.placePart}></View>
         </View>

@@ -17,6 +17,7 @@ import AppButton from '~/components/appButton';
 import { useSendDataMutation } from '../../store/api/api';
 import Notification from '../../components/Notification';
 import { areValuesEmpty, validateRegistration } from '../../utils/util.js';
+import { Ionicons } from '@expo/vector-icons';
 
 function SignUpScreen() {
   const router = useRouter();
@@ -31,7 +32,26 @@ function SignUpScreen() {
     password: '',
     referralId: '',
     confirmPassword: '',
+    role: '',
   });
+
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const roles = ['Driver', 'User'];
+
+  // dropdown
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
+  const handleSelection = (value: any) => {
+    setData({
+      ...data,
+      role: value,
+    });
+
+    setIsDropdownOpen(false);
+  };
 
   //MAKE API CALL
   const [signUp, { isLoading, reset }] = useSendDataMutation();
@@ -45,7 +65,12 @@ function SignUpScreen() {
       });
       return;
     }
-    const validationResult = validateRegistration(data.email, data.password, data.confirmPassword);
+    const validationResult = validateRegistration(
+      data.email,
+      data.password,
+      data.role,
+      data.confirmPassword
+    );
     if (validationResult !== true) {
       setNotification({
         message: validationResult,
@@ -71,7 +96,7 @@ function SignUpScreen() {
       setNotification({
         message: request?.error?.data?.error
           ? request?.error?.data?.error
-          : 'Check Internet Conn and try again',
+          : 'Check Internet and try again',
         status: 'error',
         show: true,
       });
@@ -115,6 +140,34 @@ function SignUpScreen() {
               }
             />
           </View>
+
+          {/* dropdown  */}
+
+          <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.dropdown} onPress={toggleDropdown}>
+              <Image source={require('../../assets/user.png')} resizeMode="contain" />
+              <Text style={styles.selectedText}>{data.role || 'Select Role'}</Text>
+              <Ionicons
+                name={isDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={24}
+                color="grey"
+              />
+            </TouchableOpacity>
+
+            {isDropdownOpen && (
+              <View style={styles.dropdownList}>
+                {roles.map((role, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.dropdownItem}
+                    onPress={() => handleSelection(role)}>
+                    <Text style={styles.dropdownItemText}>{role}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
           <View style={styles.inputContainers}>
             <Image source={require('../../assets/key.png')} resizeMode="contain" />
             <TextInput
@@ -279,5 +332,50 @@ const styles = StyleSheet.create({
     gap: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  inputContainer: {
+    position: 'relative',
+    zIndex: 1,
+    borderColor: '#E4E4E4',
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: '#F7F7F7',
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+  },
+  selectedText: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontStyle: 'normal',
+    fontWeight: '400',
+    color: 'grey',
+    width: '100%',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    marginTop: 5,
+  },
+  dropdownItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  dropdownItemText: {
+    fontSize: 16,
   },
 });
