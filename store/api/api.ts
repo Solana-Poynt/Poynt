@@ -1,6 +1,10 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { baseURL } from '../../utils/config/baseUrl';
-import { getDataFromAsyncStorage } from '../../utils/localStorage';
+import {
+  getDataFromAsyncStorage,
+  deleteDataFromAsyncStorage,
+  saveDataToAsyncStorage,
+} from '../../utils/localStorage';
 import { setIsAuth, logOut } from '../slices/isAuthSlice';
 import { IUser, IUserResponse } from '~/app/interfaces/interfaces';
 
@@ -59,12 +63,24 @@ const baseQueryWithReauth = async (args: any, api: any, extraOptions: any): Prom
           user: data,
         })
       );
+      await saveDataToAsyncStorage('accessToken', accessToken);
+      await saveDataToAsyncStorage('refreshToken', refreshToken);
+      await saveDataToAsyncStorage('id', data._id);
+      await saveDataToAsyncStorage('email', data.email);
+      await saveDataToAsyncStorage('name', data.name);
+      await saveDataToAsyncStorage('role', data.role);
 
       // Retry the initial query with the new token
       result = await baseQuery(args, api, extraOptions);
     } else {
       // Log out the user if token refresh fails
       api.dispatch(logOut());
+      await deleteDataFromAsyncStorage('accessToken');
+      await deleteDataFromAsyncStorage('refreshToken');
+      await deleteDataFromAsyncStorage('id');
+      await deleteDataFromAsyncStorage('role');
+      await deleteDataFromAsyncStorage('email');
+      await deleteDataFromAsyncStorage('name');
     }
   }
 

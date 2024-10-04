@@ -14,7 +14,6 @@ export default function BottomNav() {
   const getUserRole = async () => {
     try {
       const role = await getDataFromAsyncStorage('role');
-      console.log(role); // For debugging
 
       return role === 'driver' ? '/screens/contributeDriver' : '/screens/contributeUser';
     } catch (error) {
@@ -52,6 +51,23 @@ export default function BottomNav() {
     };
 
     setupNavigation(); // Call the async function to set navigation
+  }, []);
+
+  //LOG USER OUT IF THEY ARE NOT AUTHENTICATED
+  async function isAuthenticated() {
+    const accessToken = await getDataFromAsyncStorage('accessToken');
+    const refreshToken = await getDataFromAsyncStorage('refreshToken');
+
+    if (!accessToken && !refreshToken) {
+      router.push({ pathname: '/screens/login' });
+    }
+  }
+
+  useEffect(() => {
+    const checkUserAuth = async () => {
+      await isAuthenticated();
+    };
+    checkUserAuth();
   }, []);
 
   return (
