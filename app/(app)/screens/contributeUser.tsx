@@ -1,5 +1,5 @@
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import {
   AppState,
   Linking,
@@ -15,6 +15,7 @@ import { Overlay } from './overlay';
 import { useEffect, useRef, useState } from 'react';
 
 export default function Home() {
+  const router = useRouter();
   const qrLock = useRef(false);
   const appState = useRef(AppState.currentState);
   const [permission, requestPermission] = useCameraPermissions(); // Request permissions
@@ -44,19 +45,25 @@ export default function Home() {
   if (hasPermission === null) {
     // Permissions are still loading
     return (
-      <View>
-        <Text>Requesting for camera permission...</Text>
-      </View>
+      <>
+        <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
+        <View>
+          <Text>Requesting for camera permission...</Text>
+        </View>
+      </>
     );
   }
 
   if (!hasPermission) {
     // Permissions were not granted
     return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center' }}>We need your permission to use the camera</Text>
-        <Button onPress={requestPermission} title="Grant Camera Permission" />
-      </View>
+      <>
+        <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
+        <View style={styles.container}>
+          <Text style={{ textAlign: 'center' }}>We need your permission to use the camera</Text>
+          <Button onPress={requestPermission} title="Grant Camera Permission" />
+        </View>
+      </>
     );
   }
 
@@ -72,7 +79,14 @@ export default function Home() {
             if (data && !qrLock.current) {
               qrLock.current = true;
               setTimeout(async () => {
-                await Linking.openURL(data);
+                // await Linking.openURL(data);
+                console.log('ppppppp', data);
+                router.push({
+                  pathname: '/screens/adpopup',
+                  params: {
+                    driverId: data,
+                  },
+                });
               }, 500);
             }
           }}

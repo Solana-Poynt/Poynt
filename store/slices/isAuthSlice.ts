@@ -44,27 +44,11 @@ export const isAuthSlice = createSlice({
       state.isAuth = true;
       state.accessToken = accessToken;
       state.refreshToken = refreshToken;
-
-      // // Save data in local storage
-      // if (accessToken && refreshToken && user) {
-      //   saveDataToAsyncStorage('accessToken', accessToken);
-      //   saveDataToAsyncStorage('refreshToken', refreshToken);
-      //   saveDataToAsyncStorage('id', user._id);
-      //   saveDataToAsyncStorage('email', user.email);
-      //   saveDataToAsyncStorage('name', user.name);
-      // }
     },
     logOut: (state: AuthState) => {
       state.isAuth = false;
       state.accessToken = null;
       state.refreshToken = null;
-
-      // Remove data from local storage
-      deleteDataFromAsyncStorage('accessToken');
-      deleteDataFromAsyncStorage('refreshToken');
-      deleteDataFromAsyncStorage('id');
-      deleteDataFromAsyncStorage('email');
-      deleteDataFromAsyncStorage('name');
     },
   },
 });
