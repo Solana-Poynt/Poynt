@@ -22,6 +22,7 @@ import { setIsAuth } from '../../store/slices/isAuthSlice';
 
 import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage.js';
 
+
 function LoginScreen() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();

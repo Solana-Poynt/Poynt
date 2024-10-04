@@ -67,7 +67,7 @@ function ProfileScreen() {
               ? require('../../../assets/incognito.png')
               : image === 'Logout'
                 ? require('../../../assets/previous.png')
-              : '';
+                : '';
   };
 
   const getActionIcon = (image: string) => {
@@ -81,7 +81,9 @@ function ProfileScreen() {
             ? require('../../../assets/switch.png')
             : image === 'Incognito Mode'
               ? require('../../../assets/switch.png')
-              : '';
+              : image === 'Logout'
+                ? require('../../../assets/previous.png')
+                : '';
   };
 
   return (

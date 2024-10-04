@@ -32,7 +32,8 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
           "recordAudioAndroid": true
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -49,7 +50,7 @@
     "assetBundlePatterns": ["**/*"],
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/trans.png",
+        "foregroundImage": "./assets/ts2.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [

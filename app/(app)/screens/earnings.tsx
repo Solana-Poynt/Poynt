@@ -1,9 +1,25 @@
 import { Platform, StatusBar, StyleSheet, View, Image, Text, TouchableOpacity } from 'react-native';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { connectWallet, disconnectWallet } from '~/components/walletConnect';
 
 function EarningsScreen() {
   const router = useRouter();
+  const [isConnected, setIsConnected] = useState(false);
+
+  const connect = async () => {
+    const result = await connectWallet();
+    if (result) {
+      setIsConnected(true);
+      console.log('Connected to wallet:', result.accounts[0].address);
+    }
+  };
+
+  const disconnect = async () => {
+    const result = await disconnectWallet();
+    setIsConnected(false);
+  };
 
   return (
     <>
@@ -18,7 +34,15 @@ function EarningsScreen() {
         <View style={styles.topContainer}>
           <TouchableOpacity style={[styles.connectButton]}>
             {/* <Text style={styles.connectText}>Connect wallet</Text> */}
-            <Image source={require('../../../assets/subtract.png')} resizeMode="contain" />
+            {!isConnected ? (
+              <TouchableOpacity style={styles.button} onPress={connect}>
+                <Text style={styles.buttonText}>Connect</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.button} onPress={disconnect}>
+                <Text style={styles.buttonText}>Disconnect</Text>
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
 
           <View
@@ -60,7 +84,7 @@ function EarningsScreen() {
                   gap: 8,
                 }}>
                 <Image source={require('../../../assets/coin.png')} resizeMode="contain" />
-                <Text style={styles.earning}>10.00k</Text>
+                <Text style={styles.earning}>0</Text>
               </View>
             </View>
 
@@ -75,32 +99,11 @@ function EarningsScreen() {
                   gap: 8,
                 }}>
                 <Image source={require('../../../assets/coin.png')} resizeMode="contain" />
-                <Text style={styles.earning}>500</Text>
+                <Text style={styles.earning}>0</Text>
               </View>
             </View>
           </View>
         </View>
-
-        <View
-          style={{
-            marginTop: 24,
-            width: '100%',
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-          <Text style={styles.activitiesText}>Activities</Text>
-          <View style={styles.daily}>
-            <Text style={styles.dailyText}>Daily</Text>
-            <Image source={require('../../../assets/down.png')} resizeMode="contain" />
-          </View>
-        </View>
-
-        <Image
-          style={styles.chartImg}
-          source={require('../../../assets/chart.png')}
-          resizeMode="contain"
-        />
 
         <View style={styles.listItems}>
           <TouchableOpacity onPress={() => {}} style={styles.listItem}>
@@ -305,5 +308,26 @@ const styles = StyleSheet.create({
     fontStyle: 'normal',
     lineHeight: 24,
     fontWeight: '500',
+  },
+
+  button: {
+    backgroundColor: '#B71C1C',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    position: 'absolute',
+    right: 49,
+    top: -6,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
