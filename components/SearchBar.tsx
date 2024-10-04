@@ -13,10 +13,7 @@ import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Mapbox from '@rnmapbox/maps';
-
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
-
-const MAPBOX_ACCESS_TOKEN = process.env.EXPO_PUBLIC_CODE || '';
 
 const FOURSQUARE_API_KEY = 'fsq3Gvr/n2MKj0SfyGug4mtRH6gtgz6kBbSYjGG61JKbnj4=';
 
@@ -33,9 +30,10 @@ interface Place {
 interface MapboxSearchProps {
   userLocation: [number, number] | number[];
   onPlaceSelect: (place: Place) => void;
+  mapReady: boolean;
 }
 
-const MapboxSearch: React.FC<MapboxSearchProps> = ({ userLocation, onPlaceSelect }) => {
+const MapboxSearch: React.FC<MapboxSearchProps> = ({ userLocation, onPlaceSelect, mapReady }) => {
   const [searchText, setSearchText] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -121,25 +119,60 @@ const MapboxSearch: React.FC<MapboxSearchProps> = ({ userLocation, onPlaceSelect
     setSuggestions([]);
     setNoResults(false);
   };
+  useEffect(() => {
+    if (mapReady) {
+      setIsModalVisible(true);
+    }
+  }, [mapReady]);
 
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={openSearchModal} style={styles.searchBar}>
         <View style={styles.firstContainer}>
           <FontAwesome5 name="search" size={22} color="#A2A2A2" />
-          <Text style={styles.searchBarText}>Search Places, Locations ...</Text>
+          <Text style={styles.searchBarText}>Where to?</Text>
         </View>
         <FontAwesome5 name="microphone" size={22} color="#A2A2A2" />
       </TouchableOpacity>
 
       <Modal visible={isModalVisible} animationType="slide">
         <View style={styles.modalContainer}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 22,
+              marginLeft: 22,
+            }}>
+            <TouchableOpacity onPress={closeSearchModal} style={styles.closeButton}>
+              <Ionicons name="arrow-back-outline" size={23} color="#A2A2A2" />
+            </TouchableOpacity>
+
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: '700',
+              }}>
+              Plan your route
+            </Text>
+          </View>
+
           <View style={styles.modalHeader}>
             <View style={styles.searchInputContainer}>
-              <TouchableOpacity onPress={closeSearchModal} style={styles.closeButton}>
-                <Ionicons name="arrow-back-outline" size={23} color="#A2A2A2" />
-              </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                placeholder="Current Location"
+                value={`${userLocation}`}
+                onChangeText={(text) => setSearchText(text)}
+                autoFocus
+              />
 
+              {/* <TouchableOpacity onPress={clearText}>
+                <FontAwesome name="close" size={24} color="#A2A2A2" />
+              </TouchableOpacity> */}
+            </View>
+            {/* ////////////// */}
+            <View style={styles.searchInputContainer}>
               <TextInput
                 style={styles.input}
                 placeholder="Search Places, Locations ..."
@@ -147,13 +180,10 @@ const MapboxSearch: React.FC<MapboxSearchProps> = ({ userLocation, onPlaceSelect
                 onChangeText={(text) => setSearchText(text)}
                 autoFocus
               />
-              {searchText ? (
-                <TouchableOpacity onPress={clearText}>
-                  <FontAwesome name="close" size={24} color="#A2A2A2" />
-                </TouchableOpacity>
-              ) : (
-                <FontAwesome5 name="microphone" size={22} color="#A2A2A2" />
-              )}
+
+              <TouchableOpacity onPress={clearText}>
+                <FontAwesome name="close" size={24} color="#A2A2A2" />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -227,18 +257,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   modalContainer: {
-    flex: 1,
     backgroundColor: 'white',
+    flexDirection: 'column',
+    gap: 5,
+
+    marginTop: 12,
   },
   modalHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
+    gap: 12,
     alignItems: 'center',
     padding: 16,
+    marginLeft: 2,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
   searchInputContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0F0F0',

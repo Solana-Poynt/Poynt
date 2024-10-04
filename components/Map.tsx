@@ -1,25 +1,7 @@
 import { Text } from 'react-native';
-import Mapbox, {
-  Camera,
-  LocationPuck,
-  locationManager,
-  MapView,
-  ShapeSource,
-  SymbolLayer,
-  Images,
-} from '@rnmapbox/maps';
+import Mapbox, { Camera, LocationPuck, MapView } from '@rnmapbox/maps';
 import { useState, useRef, useEffect } from 'react';
-import {
-  StyleSheet,
-  View,
-  TouchableOpacity,
-  Alert,
-  SafeAreaView,
-  ActivityIndicator,
-  StatusBar,
-  Button,
-} from 'react-native';
-import { requestLocationPermission } from '~/utils/Permissions';
+import { StyleSheet, View } from 'react-native';
 import MapboxSearch from './SearchBar';
 import SelectedPlace from './SelectedPlace';
 import ViewPlace from './ViewPlace';
@@ -41,6 +23,7 @@ interface Place {
 
 export default function Map() {
   const [isMapReady, setIsMapReady] = useState<boolean>(false);
+  const [isRendered, setIsRendered] = useState<boolean>(false);
   const [hasMapError, setHasMapError] = useState<boolean>(false);
   const [userLocation, setUserLocation] = useState<[number, number] | number[]>();
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
@@ -54,9 +37,13 @@ export default function Map() {
 
   useEffect(() => {
     if (hasLocationPermission && location) {
-     setUserLocation(location);
+      setUserLocation(location);
     }
   }, [location, hasLocationPermission]);
+
+  useEffect(() => {
+    setIsRendered(true);
+  }, []);
 
   const handlePlaceSelect = (place: Place) => {
     setSelectedPlace(place);
@@ -77,7 +64,6 @@ export default function Map() {
       animationDuration: 2000,
     });
   };
-  
 
   const onMapError = () => setHasMapError(true);
   const onMapLoad = () => setIsMapReady(true);
@@ -131,7 +117,11 @@ export default function Map() {
       {/* {userLocation && <Center userLocation={userLocation} onCenterSelect={handleCenterSelect} />} */}
 
       {userLocation && (
-        <MapboxSearch userLocation={userLocation} onPlaceSelect={handlePlaceSelect} />
+        <MapboxSearch
+          userLocation={userLocation}
+          onPlaceSelect={handlePlaceSelect}
+          mapReady={isRendered}
+        />
       )}
       {showPlaceDetails && selectedPlace && (
         <ViewPlace selectedPlace={selectedPlace} handleCancel={handleCancel} />

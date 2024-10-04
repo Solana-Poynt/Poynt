@@ -1,11 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { TouchableOpacity, Text, StyleSheet, View, Modal } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, View, Image } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import CircularRating from './icons/rating';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import WeatherGrid from './icons/weatherForcast';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 interface Place {
   id: string;
@@ -36,7 +34,6 @@ const weatherData: WeatherItem[] = [
 
 const ViewPlace: React.FC<ViewPlaceProps> = ({ selectedPlace, handleCancel }) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const [activeSection, setActiveSection] = useState('overview');
 
   useEffect(() => {
     if (selectedPlace) {
@@ -45,27 +42,6 @@ const ViewPlace: React.FC<ViewPlaceProps> = ({ selectedPlace, handleCancel }) =>
       bottomSheetRef.current?.close();
     }
   }, [selectedPlace]);
-
-  const renderSections = () => (
-    <View style={styles.sectionsContainer}>
-      {['overview', 'reviews', 'about'].map((section) => (
-        <TouchableOpacity
-          key={section}
-          style={[styles.sectionButton, activeSection === section && styles.activeSectionButton]}
-          onPress={() => setActiveSection(section)}>
-          <Text
-            style={[
-              styles.sectionButtonText,
-              activeSection === section && styles.activeSectionButtonText,
-            ]}>
-            {section.charAt(0).toUpperCase() + section.slice(1)}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
-  const rating: number = 5;
 
   return (
     <BottomSheet
@@ -90,38 +66,28 @@ const ViewPlace: React.FC<ViewPlaceProps> = ({ selectedPlace, handleCancel }) =>
           </View>
 
           <View style={styles.visitButtons}>
-            <TouchableOpacity style={styles.visitButton} onPress={handleCancel}>
-              <MaterialIcons name="push-pin" size={20} color="#757575" />
-              <Text style={styles.visitButtonText}>Visit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.visitButton} onPress={handleCancel}>
-              <MaterialIcons name="directions" size={20} color="#757575" />
-              <Text style={styles.visitButtonText}>Directions</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.visitButton} onPress={handleCancel}>
-              <MaterialIcons name="share" size={20} color="#757575" />
-              <Text style={styles.visitButtonText}>Share</Text>
-            </TouchableOpacity>
+            <View>
+              <Image style={{ width: 103, height: 63 }} source={require('../assets/drive.png')} />
+            </View>
+            <View style={{ flexDirection: 'column', marginTop: 18, gap: 4 }}>
+              <Text style={{ color: 'black', fontWeight: '600', fontSize: 13 }}>ETA: 15 mins</Text>
+            </View>
+            <View>
+              <Text style={styles.placeName}>$4.00</Text>
+            </View>
           </View>
 
-          {renderSections()}
-
-          <View style={styles.sectionContent}>
-            {activeSection === 'overview' && (
-              <>
-                <View style={styles.weatherContainer}>
-                  <WeatherGrid weatherData={weatherData} />
-                </View>
-              </>
-            )}
-            {activeSection === 'reviews' && (
-              <Text style={styles.placeholderText}>Reviews will be displayed here.</Text>
-            )}
-            {activeSection === 'about' && (
-              <Text style={styles.placeholderText}>
-                Additional information about the place will be shown here.
-              </Text>
-            )}
+          <View
+            style={{
+              marginTop: 28,
+              backgroundColor: '#801414',
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 10,
+            }}>
+            <TouchableOpacity style={styles.visitButton} onPress={handleCancel}>
+              <Text style={styles.visitButtonText}>Book</Text>
+            </TouchableOpacity>
           </View>
         </BottomSheetView>
       )}
@@ -133,7 +99,7 @@ const styles = StyleSheet.create({
   bottomSheetContent: {
     flex: 1,
     paddingHorizontal: 20,
-    gap: 22,
+    gap: 9,
   },
   header: {
     display: 'flex',
@@ -190,7 +156,7 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   visitButtonText: {
-    color: '#757575',
+    color: 'white',
     fontWeight: 'bold',
     marginLeft: 5,
   },

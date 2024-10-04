@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { locationManager } from '@rnmapbox/maps';
-import { Alert, Platform } from 'react-native';
+// import { locationManager } from '@rnmapbox/maps';
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestLocationPermission } from '~/utils/Permissions';
+import { API_KEY } from '@env';
 
-const API_KEY = process.env.EXPO_APP_API_KEY;
+// const API_KEY = process.env.EXPO_APP_API_KEY;
 
 import * as Location from 'expo-location';
 const CACHE_DURATION = 30 * 60 * 1000;
@@ -99,7 +100,7 @@ export const useWeatherInfo = () => {
       country: data.location.country,
       temp_c: data.current.temp_c,
       feels_like: data.current.feelslike_c,
-      condition: data.current.condition.text,
+      condition: data?.current?.condition?.text,
       dewpoint: data.current.dewpoint_c,
       heatindex: data.current.heatindex_c,
       isday: data.current.is_day,

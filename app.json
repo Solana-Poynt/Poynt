@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "poynt",
-    "slug": "poynt",
+    "name": "Poynt",
+    "slug": "Poynt",
     "version": "1.0.0",
-    "scheme": "poynt",
+    "scheme": "Poynt",
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/splash.png"
+      "favicon": "./assets/logs.png"
     },
     "plugins": [
       "expo-router",
@@ -39,22 +39,17 @@
       "tsconfigPaths": true
     },
     "orientation": "portrait",
-    "icon": "./assets/splash.png",
+    "icon": "./assets/logs.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/poynt.png",
+      "image": "./assets/trans.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FDF6E6"
     },
     "assetBundlePatterns": ["**/*"],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.paultech.poynt"
-    },
     "android": {
-      "jsEngine": "jsc",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/poynt.png",
+        "foregroundImage": "./assets/trans.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -64,16 +59,16 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.paultech.poynt"
+      "package": "com.alphar33.Poynt"
     },
     "extra": {
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": "5689d13b-d741-4d3b-92d9-872f12cd795c"
+        "projectId": "6e5b05bf-58b6-467c-afa3-4f126091ec35"
       }
     },
-    "assets": ["./assets/poynt.png"]
+    "assets": ["./assets/trans.png"]
   }
 }
