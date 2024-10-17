@@ -1,106 +1,54 @@
-import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
-import { Stack, useRouter } from 'expo-router';
-import {
-  AppState,
-  Linking,
-  Platform,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-  Button,
-} from 'react-native';
-import { Overlay } from './overlay';
-import { useEffect, useRef, useState } from 'react';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Stack } from 'expo-router';
 
-export default function Home() {
-  const router = useRouter();
-  const qrLock = useRef(false);
-  const appState = useRef(AppState.currentState);
-  const [permission, requestPermission] = useCameraPermissions(); // Request permissions
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        qrLock.current = false;
-      }
-      appState.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    // Request camera permissions when the component mounts
-    (async () => {
-      const { status } = await requestPermission();
-      setHasPermission(status === 'granted');
-    })();
-  }, []);
-
-  if (hasPermission === null) {
-    // Permissions are still loading
-    return (
-      <>
-        <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
-        <View>
-          <Text>Requesting for camera permission...</Text>
-        </View>
-      </>
-    );
-  }
-
-  if (!hasPermission) {
-    // Permissions were not granted
-    return (
-      <>
-        <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
-        <View style={styles.container}>
-          <Text style={{ textAlign: 'center' }}>We need your permission to use the camera</Text>
-          <Button onPress={requestPermission} title="Grant Camera Permission" />
-        </View>
-      </>
-    );
-  }
-
+const ContributeUser = () => {
   return (
-    <>
+    <View style={styles.container}>
       <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
-      <SafeAreaView style={StyleSheet.absoluteFillObject}>
-        {Platform.OS === 'android' ? <StatusBar hidden /> : null}
-        <CameraView
-          style={StyleSheet.absoluteFillObject}
-          facing="back"
-          onBarcodeScanned={({ data }) => {
-            if (data && !qrLock.current) {
-              qrLock.current = true;
-              setTimeout(async () => {
-                // await Linking.openURL(data);
-                console.log('ppppppp', data);
-                router.push({
-                  pathname: '/screens/adpopup',
-                  params: {
-                    driverId: data,
-                  },
-                });
-              }, 500);
-            }
-          }}
-        />
-        <Overlay />
-      </SafeAreaView>
-    </>
+      <Text style={styles.title}>Coming Soon!</Text>
+      <Text style={styles.message}>
+        We’re working hard to bring this feature to you. Stay tuned!
+      </Text>
+
+      <TouchableOpacity style={styles.button}>
+        <Text style={styles.buttonText}>Notify Me</Text>
+      </TouchableOpacity>
+    </View>
   );
-}
+};
+
+export default ContributeUser;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  message: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#007bff',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

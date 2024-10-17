@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "poynt",
-    "slug": "poynt",
+    "name": "Poynt",
+    "slug": "Poynt",
     "version": "1.0.0",
-    "scheme": "poynt",
+    "scheme": "com.alphar33.Poynt",
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -33,8 +33,6 @@
           "recordAudioAndroid": true
         }
       ],
-      "react-native-video"
-      ],
       "expo-secure-store"
     ],
     "experiments": {
@@ -49,13 +47,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#FDF6E6"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.paultech.poynt"
-    },
+    "assetBundlePatterns": ["**/*"],
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/ts2.png",
@@ -68,18 +60,17 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.paultech.poynt"
+      "package": "com.alphar33.Poynt",
+      "googleServicesFile": false
     },
     "extra": {
       "router": {
         "origin": false
       },
       "eas": {
-        "projectId": "5689d13b-d741-4d3b-92d9-872f12cd795c"
+        "projectId": "6e5b05bf-58b6-467c-afa3-4f126091ec35"
       }
     },
-    "assets": [
-      "./assets/trans.png"
-    ]
+    "assets": ["./assets/trans.png"]
   }
 }

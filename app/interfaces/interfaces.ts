@@ -18,6 +18,7 @@ export interface IButton {
     | '/(app)/screens/home'
     | '/(app)/screens/navigate'
     | '/screens/signup'
+    | '/screens/web3'
     | '/screens/otp'
     | '/screens/recover'
     | '/screens/reset'

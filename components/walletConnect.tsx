@@ -51,18 +51,17 @@ export async function connectWallet(): Promise<AuthorizationResult | null> {
     const storedAuthToken = await getStoredAuthToken();
 
     const authorizationResult = await transact(async (wallet: Web3MobileWallet) => {
-      console.log('Attempting to authorize wallet...');
       const result = await wallet.authorize({
         identity: APP_IDENTITY,
         auth_token: storedAuthToken || undefined,
       });
-      console.log('Authorization result:', result);
+
       return result as AuthorizationResult;
     });
 
     if (authorizationResult) {
       await storeAuthToken(authorizationResult.auth_token);
-      console.log('Wallet connected');
+
       return authorizationResult;
     }
 
@@ -76,7 +75,6 @@ export async function connectWallet(): Promise<AuthorizationResult | null> {
 export async function disconnectWallet(): Promise<void> {
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);
-    console.log('Disconnected from wallet');
   } catch (error) {
     console.error('Error disconnecting from wallet:', error);
   }
@@ -96,7 +94,6 @@ export async function signAndSendTransaction(transaction: any): Promise<string |
       return result[0];
     });
 
-    console.log('Transaction sent:', signedTransaction);
     return signedTransaction;
   } catch (error) {
     console.error('Error signing and sending transaction:', error);

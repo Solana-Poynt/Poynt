@@ -119,7 +119,6 @@ function OnBoardScreen() {
         </PanGestureHandler>
 
         <View style={styles.buttonContainers}>
-          <AppButton title={'Get Started'} color={'Dark'} link={'/screens/signup'} />
           <AppButton title={'Login'} color={'Light'} link={'/screens/login'} />
         </View>
       </SafeAreaView>
