@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requestLocationPermission } from '~/utils/Permissions';
-import { API_KEY } from '@env';
+import { EXPO_PUBLIC_API_KEY } from '@env';
 
 // const API_KEY = process.env.EXPO_APP_API_KEY;
 
@@ -86,7 +86,7 @@ export const useWeatherInfo = () => {
 
   const fetchWeather = useCallback(async (lat: number, lng: number): Promise<WeatherData> => {
     const response = await fetch(
-      `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${lat},${lng}&aqi=no`
+      `https://api.weatherapi.com/v1/current.json?key=${EXPO_PUBLIC_API_KEY}&q=${lat},${lng}&aqi=no`
     );
     if (!response.ok) {
       const errorData = await response.json();

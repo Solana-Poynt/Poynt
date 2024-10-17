@@ -6,6 +6,7 @@ import { IUser } from '~/app/interfaces/interfaces';
 import { useDispatch } from 'react-redux';
 import { logOut } from '~/store/slices/isAuthSlice';
 import { AppDispatch } from '~/store/store';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 function ProfileScreen() {
   const router = useRouter();
@@ -13,10 +14,10 @@ function ProfileScreen() {
   const dispatch = useDispatch<AppDispatch>();
   async function logout() {
     try {
+      await GoogleSignin.signOut();
       // Clear auth state in Redux
       dispatch(logOut());
 
-      // Redirect to login screen
       router.push({ pathname: '/screens/login' });
     } catch (error) {
       console.error('Logout failed:', error);
@@ -29,23 +30,15 @@ function ProfileScreen() {
 
   const listItems: any = [
     {
-      name: 'My Places',
-      path: '',
-    },
-    {
-      name: 'Change Email',
-      path: '',
-    },
-    {
-      name: 'Change Password',
-      path: '',
-    },
-    {
       name: 'Enable Notifications',
       path: '',
     },
     {
       name: 'Incognito Mode',
+      path: '',
+    },
+    {
+      name: 'Settings',
       path: '',
     },
     {
@@ -55,33 +48,27 @@ function ProfileScreen() {
   ];
 
   const getIcon = (image: string) => {
-    return image === 'My Places'
-      ? require('../../../assets/star.png')
-      : image === 'Change Email'
-        ? require('../../../assets/email.png')
-        : image === 'Change Password'
-          ? require('../../../assets/lock.png')
-          : image === 'Enable Notifications'
-            ? require('../../../assets/bell.png')
-            : image === 'Incognito Mode'
-              ? require('../../../assets/incognito.png')
-              : image === 'Logout'
-                ? require('../../../assets/previous.png')
-              : '';
+    return image === 'Enable Notifications'
+      ? require('../../../assets/bell.png')
+      : image === 'Settings'
+        ? require('../../../assets/key.png')
+        : image === 'Incognito Mode'
+          ? require('../../../assets/incognito.png')
+          : image === 'Logout'
+            ? require('../../../assets/previous.png')
+            : '';
   };
 
   const getActionIcon = (image: string) => {
-    return image === 'My Places'
-      ? require('../../../assets/next.png')
-      : image === 'Change Email'
-        ? require('../../../assets/next.png')
-        : image === 'Change Password'
-          ? require('../../../assets/next.png')
-          : image === 'Enable Notifications'
-            ? require('../../../assets/switch.png')
-            : image === 'Incognito Mode'
-              ? require('../../../assets/switch.png')
-              : '';
+    return image === 'Enable Notifications'
+      ? require('../../../assets/switch.png')
+      : image === 'Incognito Mode'
+        ? require('../../../assets/switch.png')
+        : image === 'Settings'
+          ? require('../../../assets/key.png')
+          : image === 'Logout'
+            ? require('../../../assets/previous.png')
+            : '';
   };
 
   return (
@@ -112,16 +99,13 @@ function ProfileScreen() {
         <View style={styles.subTabs}>
           <Text style={[styles.tabText, styles.textWithBg]}>My Profile</Text>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push('/screens/earnings')}>
-            <Text style={[styles.tabText]}>My Earnings</Text>
+            <Text style={[styles.tabText]}>My Wallet</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.listItemsContainer}>
           {listItems.map((item: any) => (
-            <TouchableOpacity
-              key={item.name}
-              onPress={item.name === 'Logout' ? logout : () => {}}
-              style={styles.listItem}>
+            <TouchableOpacity key={item.name} onPress={logout} style={styles.listItem}>
               <Image source={getIcon(item.name)} />
               <Text style={styles.listItemText}>{item.name}</Text>
               <Image source={getActionIcon(item.name)} />

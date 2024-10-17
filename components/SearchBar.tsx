@@ -14,12 +14,170 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Mapbox from '@rnmapbox/maps';
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
+import { EXPO_PUBLIC_FOURSQUARE_API_KEY } from '@env';
 
-const FOURSQUARE_API_KEY = 'fsq3Gvr/n2MKj0SfyGug4mtRH6gtgz6kBbSYjGG61JKbnj4=';
+const FOURSQUARE_API_KEY = EXPO_PUBLIC_FOURSQUARE_API_KEY;
 
-// interface MapboxSearchProps {
-//   userLocation: [number, number] | any;
-// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 interface Place {
   id: string;
   name: string;
@@ -162,7 +320,7 @@ const MapboxSearch: React.FC<MapboxSearchProps> = ({ userLocation, onPlaceSelect
               <TextInput
                 style={styles.input}
                 placeholder="Current Location"
-                value={`${userLocation}`}
+                value={'Current Location'}
                 onChangeText={(text) => setSearchText(text)}
                 autoFocus
               />

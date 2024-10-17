@@ -2,101 +2,62 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  Platform,
-  StatusBar,
   StyleSheet,
   TextInput,
   Image,
   TouchableOpacity,
+  Platform,
+  StatusBar,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import BackButton from '~/components/backButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AppButton from '~/components/appButton';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../store/store';
+import { setIsAuth } from '../../store/slices/isAuthSlice';
 import { useSendDataMutation } from '../../store/api/api';
+import { useOkto, type OktoContextType } from 'okto-sdk-react-native';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import AppButton from '~/components/appButton';
 import Notification from '../../components/Notification';
 import { areValuesEmpty, validateRegistration } from '../../utils/util.js';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState, AppDispatch } from '../../store/store';
-import { setIsAuth } from '../../store/slices/isAuthSlice';
-
 import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage.js';
+import { Ionicons } from '@expo/vector-icons';
+
+GoogleSignin.configure({
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  offlineAccess: true,
+  scopes: ['profile', 'email'],
+});
+
+interface NotificationState {
+  message: string;
+  status: string;
+  show: boolean;
+}
 
 function LoginScreen() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
-  const [notification, setNotification] = useState({
+  const [signIn, { isLoading }] = useSendDataMutation();
+  const { authenticate, createWallet } = useOkto() as OktoContextType;
+
+  const [notification, setNotification] = useState<NotificationState>({
     message: '',
     status: '',
     show: false,
   });
-  const [data, setData] = useState({
-    email: '',
-    password: '',
-  });
+  const [data, setData] = useState({ email: '', password: '' });
+  const [isRole, setRole] = useState('user');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const roles = ['driver', 'user'];
 
-  //MAKE API CALL
-  const [signIn, { isLoading }] = useSendDataMutation();
-  async function login() {
-    const isEmpty = areValuesEmpty(data);
-    if (isEmpty) {
-      setNotification({
-        message: 'Empty Fields',
-        status: 'error',
-        show: true,
-      });
-      return;
-    }
-    const validationResult = validateRegistration(data.email);
-    if (validationResult !== true) {
-      setNotification({
-        message: validationResult,
-        status: 'error',
-        show: true,
-      });
-      return;
-    }
-    const request: any = await signIn({
-      url: 'auth/login',
-      data: data,
-      type: 'POST',
-    });
-    if (request?.data) {
-      const { message, accessToken, refreshToken, user } = request?.data;
-      setNotification({
-        message: message,
-        status: 'success',
-        show: true,
-      });
-      //dispatch setisauth here
-      dispatch(
-        setIsAuth({
-          accessToken: accessToken,
-          refreshToken: refreshToken,
-          user: user,
-        })
-      );
-      await saveDataToAsyncStorage('accessToken', accessToken);
-      await saveDataToAsyncStorage('refreshToken', refreshToken);
-      await saveDataToAsyncStorage('id', user._id);
-      await saveDataToAsyncStorage('email', user.email);
-      await saveDataToAsyncStorage('name', user.name);
-      await saveDataToAsyncStorage('role', user.role);
-      router.push({ pathname: '/screens/home' });
-    } else {
-      setNotification({
-        message: request?.error?.data?.error
-          ? request?.error?.data?.error
-          : 'Check Internet Conn and try again',
-        status: 'error',
-        show: true,
-      });
-    }
-  }
+  useEffect(() => {
+    checkUserAuth();
+  }, []);
 
-  //CHECK IF USER IS AUTHENTICATED
-  // const isAuthenticated = useSelector((state: RootState) => state.isAuth.isAuth);
-  async function isAuthenticated() {
+  async function checkUserAuth() {
     const accessToken = await getDataFromAsyncStorage('accessToken');
     const refreshToken = await getDataFromAsyncStorage('refreshToken');
 
@@ -105,34 +66,141 @@ function LoginScreen() {
     }
   }
 
-  useEffect(() => {
-    const checkUserAuth = async () => {
-      await isAuthenticated();
-    };
-    checkUserAuth();
-  }, []);
+  async function handleAuthenticate(result: any, error: any) {
+    if (result) {
+      router.push({ pathname: '/screens/home' });
+    }
+    if (error) {
+      console.error('Okto authentication error:', error);
+      showNotification('Okto authentication failed', 'error');
+    }
+  }
+
+  const toggleDropdown = () => setIsDropdownOpen(!isDropdownOpen);
+  const handleSelection = (value: string) => {
+    setRole(value);
+    setIsDropdownOpen(false);
+  };
+
+  async function handleGoogleSignIn() {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo: any = await GoogleSignin.signIn();
+
+      if (userInfo.data.idToken) {
+        const { name, email } = userInfo.data.user;
+        const response: any = await signIn({
+          url: 'auth/google',
+          data: { name, idToken: userInfo.data.idToken, email, role: isRole },
+          type: 'POST',
+        });
+
+        if (response.data) {
+          handleSuccessfulLogin(response.data);
+          authenticate(userInfo.data.idToken, handleAuthenticate);
+          await createWallet();
+        } else {
+          throw new Error('Failed to authenticate with the server');
+        }
+      }
+    } catch (error: any) {
+      console.error('Detailed Google Sign-In error:', JSON.stringify(error, null, 2));
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        showNotification('Sign-In was cancelled', 'info');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        showNotification('Sign-In is already in progress', 'warning');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        showNotification('Play services not available or outdated', 'error');
+      } else {
+        showNotification(`Google Sign-In failed: ${error.message}`, 'error');
+      }
+    }
+  }
+
+  async function handleEmailPasswordLogin() {
+    if (areValuesEmpty(data)) {
+      showNotification('Empty Fields', 'error');
+      return;
+    }
+
+    const validationResult = validateRegistration(data.email);
+    if (validationResult !== true) {
+      showNotification(validationResult, 'error');
+      return;
+    }
+
+    try {
+      const response: any = await signIn({
+        url: 'auth/login',
+        data,
+        type: 'POST',
+      });
+
+      if (response?.data) {
+        handleSuccessfulLogin(response.data);
+      } else {
+        throw new Error(response?.error?.data?.error || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      showNotification('An error occurred during login', 'error');
+    }
+  }
+
+  async function handleSuccessfulLogin(loginData: any) {
+    const { message, accessToken, refreshToken, data } = loginData;
+    showNotification(message || 'Login successful', 'success');
+
+    const user = data;
+    dispatch(setIsAuth({ accessToken, refreshToken, user }));
+
+    if (accessToken && refreshToken) {
+      try {
+        const storagePromises = [
+          saveDataToAsyncStorage('accessToken', accessToken),
+          saveDataToAsyncStorage('refreshToken', refreshToken),
+        ];
+
+        // Add user data to storage if available
+        if (user) {
+          if (user._id) storagePromises.push(saveDataToAsyncStorage('id', user._id));
+          if (user.email) storagePromises.push(saveDataToAsyncStorage('email', user.email));
+          if (user.name) storagePromises.push(saveDataToAsyncStorage('name', user.name));
+          if (user.role) storagePromises.push(saveDataToAsyncStorage('role', user.role));
+        }
+
+        await Promise.all(storagePromises);
+
+        // Navigate to home screen
+        router.push({ pathname: '/screens/home' });
+      } catch (error) {
+        console.error('Error saving data to AsyncStorage:', error);
+        showNotification('Failed to save user data', 'error');
+      }
+    } else {
+      console.error('Missing required authentication tokens');
+      showNotification('Login failed: Missing authentication tokens', 'error');
+    }
+  }
+
+  function showNotification(message: string, status: string) {
+    setNotification({ message, status, show: true });
+  }
 
   return (
     <>
       <Stack.Screen options={{ title: 'Login', headerShown: false }} />
       <SafeAreaView style={styles.container}>
-        <View style={styles.backBtn}>
-          <BackButton link={'/screens/signup'} />
-        </View>
-        <Text style={styles.title}>Login your Account</Text>
+        <Text style={styles.title}>Login to your Account</Text>
         <View style={styles.content}>
           <View style={styles.inputContainers}>
             <Image source={require('../../assets/mail.png')} resizeMode="contain" />
             <TextInput
               style={styles.inputElements}
               placeholder="Email address"
-              placeholderTextColor={'gray'}
-              value={data.email} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, email: val };
-                })
-              }
+              placeholderTextColor="gray"
+              value={data.email}
+              onChangeText={(val) => setData((prev) => ({ ...prev, email: val }))}
             />
           </View>
           <View style={styles.inputContainers}>
@@ -140,67 +208,76 @@ function LoginScreen() {
             <TextInput
               style={styles.inputElements}
               placeholder="Password"
-              placeholderTextColor={'gray'}
+              placeholderTextColor="gray"
               secureTextEntry
-              value={data.password} // Bind state
-              onChangeText={(val) =>
-                setData((prev) => {
-                  return { ...prev, password: val };
-                })
-              }
+              value={data.password}
+              onChangeText={(val) => setData((prev) => ({ ...prev, password: val }))}
             />
           </View>
-          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
-            <TouchableOpacity onPress={() => router.push({ pathname: '/screens/recover' })}>
-              <Text style={styles.terms}>Forgot password?</Text>
+          <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.dropdown} onPress={toggleDropdown}>
+              <Image source={require('../../assets/user.png')} resizeMode="contain" />
+              <Text style={styles.selectedText}>{isRole || 'Select Role'}</Text>
+              <Ionicons
+                name={isDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={24}
+                color="grey"
+              />
             </TouchableOpacity>
+            {isDropdownOpen && (
+              <View style={styles.dropdownList}>
+                {roles.map((role, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.dropdownItem}
+                    onPress={() => handleSelection(role)}>
+                    <Text style={styles.dropdownItemText}>{role}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
+          <TouchableOpacity onPress={() => router.push({ pathname: '/screens/recover' })}>
+            <Text>Forgot password?</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.buttonContainers}>
           <AppButton
             title={isLoading ? 'Loading...' : 'Login'}
-            color={'Dark'}
-            handleClick={
-              isLoading
-                ? function () {
-                    return '';
-                  }
-                : login
-            }
+            color="Dark"
+            handleClick={handleEmailPasswordLogin}
           />
-          <AppButton title={'Login with Google'} color={'Light'} image={'google'} />
+          <AppButton title="Sign In with Google" color="Light" handleClick={handleGoogleSignIn} />
         </View>
 
-        <View
-          style={{
-            width: '100%',
-            flexDirection: 'row',
-            gap: 5,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: 30,
-          }}>
+        {/* <View style={styles.signupContainer}>
           <Text style={[styles.terms, { color: '#A2A2A2' }]}>Don't have an account?</Text>
           <TouchableOpacity onPress={() => router.push({ pathname: '/screens/signup' })}>
             <Text style={styles.terms}>Create account</Text>
           </TouchableOpacity>
-        </View>
+        </View> */}
 
-        {/* DISPLAY NOTIFICATION TO USER IF IT EXISTS */}
-        {notification.show ? (
+        {notification.show && (
           <Notification
             status={notification.status}
             message={notification.message}
-            switchShowOff={() => {
-              setNotification((prev) => {
-                return { ...prev, show: false };
-              });
-            }}
+            switchShowOff={() => setNotification((prev) => ({ ...prev, show: false }))}
           />
-        ) : (
-          ''
         )}
+
+        <Modal
+          transparent={true}
+          animationType="fade"
+          visible={isLoading}
+          onRequestClose={() => {}}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <ActivityIndicator size="large" color="#0000ff" />
+              <Text style={styles.modalText}>Signing In - Please wait...</Text>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
@@ -217,11 +294,6 @@ const styles = StyleSheet.create({
     paddingLeft: 20,
     paddingRight: 20,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-  },
-  backBtn: {
-    width: '100%',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
   },
   title: {
     fontFamily: 'Inter-VariableFont',
@@ -263,7 +335,6 @@ const styles = StyleSheet.create({
     fontStyle: 'normal',
     fontWeight: '400',
     color: '#B71C1C',
-    // width: '100%',
   },
   buttonContainers: {
     width: '100%',
@@ -271,5 +342,74 @@ const styles = StyleSheet.create({
     gap: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  signupContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 30,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+  },
+  selectedText: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontStyle: 'normal',
+    fontWeight: '400',
+    color: 'grey',
+    width: '100%',
+  },
+  inputContainer: {
+    position: 'relative',
+    zIndex: 1,
+    borderColor: '#E4E4E4',
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: '#F7F7F7',
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    marginTop: 5,
+  },
+  dropdownItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  dropdownItemText: {
+    fontSize: 16,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalText: {
+    marginTop: 10,
+    fontSize: 16,
   },
 });

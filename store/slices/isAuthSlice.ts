@@ -28,11 +28,13 @@ const initialState: AuthState = {
 };
 
 // Async function to check authentication status based on stored tokens
-async function checkAuthStatus(): Promise<boolean> {
+export const checkAuthStatus = () => async (dispatch: any) => {
   const accessToken = await getDataFromAsyncStorage('accessToken');
   const refreshToken = await getDataFromAsyncStorage('refreshToken');
-  return !!accessToken && !!refreshToken;
-}
+  if (accessToken && refreshToken) {
+    dispatch(setIsAuth({ accessToken, refreshToken, user: {} as IUser }));
+  }
+};
 
 // Auth slice
 export const isAuthSlice = createSlice({
@@ -44,17 +46,38 @@ export const isAuthSlice = createSlice({
       state.isAuth = true;
       state.accessToken = accessToken;
       state.refreshToken = refreshToken;
+
+      // Save tokens to AsyncStorage
+      saveDataToAsyncStorage('accessToken', accessToken);
+      saveDataToAsyncStorage('refreshToken', refreshToken);
     },
     logOut: (state: AuthState) => {
       state.isAuth = false;
       state.accessToken = null;
       state.refreshToken = null;
+
+      // Remove tokens from AsyncStorage
+      deleteDataFromAsyncStorage('accessToken');
+      deleteDataFromAsyncStorage('refreshToken');
     },
   },
 });
 
-// Exporting the actions
+// / Exporting the actions
 export const { setIsAuth, logOut } = isAuthSlice.actions;
+
+// // Async action creator for logging out
+// export const logOutAsync = () => async (dispatch: any) => {
+//   try {
+//     await Promise.all([
+//       deleteDataFromAsyncStorage('accessToken'),
+//       deleteDataFromAsyncStorage('refreshToken'),
+//     ]);
+//     dispatch(logOut());
+//   } catch (error) {
+//     console.error('Error during logout:', error);
+//   }
+// };
 
 // Export the reducer
 export default isAuthSlice.reducer;

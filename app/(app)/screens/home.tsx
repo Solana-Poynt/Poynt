@@ -33,8 +33,9 @@ const Home: React.FC = () => {
   };
 
   //MAKE CALL TO BACKEND TO FTECH USER DATA
+  let user: IUser | null;
   const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
-  const user: IUser | undefined = userData && userData?.data;
+  user = userIsLoading ? null : (userData?.data ?? null);
 
   return (
     <>

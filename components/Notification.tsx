@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginVertical: 10,
     position: 'absolute',
-    bottom: 10,
+    bottom: 92,
     zIndex: 9999,
   },
   messageText: {
