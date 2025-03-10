@@ -6,7 +6,7 @@ import { View, StyleSheet } from 'react-native';
 
 export default function AppLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1  }}>
       <View style={styles.container}>
         <Stack.Screen options={{ title: '', headerShown: false }} />
         <Stack />
@@ -19,5 +19,6 @@ export default function AppLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    
   },
 });

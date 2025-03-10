@@ -43,6 +43,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontFamily: 'Inter-VariableFont',
     fontSize: 16,
+    color: '#FDF6E6',
     fontWeight: '500',
     fontStyle: 'normal',
     lineHeight: 24,

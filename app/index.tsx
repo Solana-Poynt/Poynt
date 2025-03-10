@@ -1,155 +1,185 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Button,
-  View,
-  Text,
-  StyleSheet,
-  Platform,
-  StatusBar,
-  SafeAreaView,
-  Image,
-  Animated,
-} from 'react-native';
+import { useState, useEffect } from 'react';
 import { useRouter, Stack } from 'expo-router';
 import AppButton from '~/components/appButton';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage.js';
+import { PanGestureHandler } from 'react-native-gesture-handler';
+import { View, SafeAreaView, ImageBackground, Dimensions } from 'react-native';
+import { StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage';
+import { Text, ActivityIndicator, Image } from 'react-native';
 
-function OnBoardScreen() {
+export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const translateX = useSharedValue(0);
+  const screenWidth = Dimensions.get('window').width;
+
+  // console.log('🔍 Rendering index.tsx (Onboarding screen)');
 
   useEffect(() => {
     checkUserStatus();
+    return () => {};
   }, []);
 
   async function checkUserStatus() {
-    const userHasOpenedApp = await getDataFromAsyncStorage('userHasOpenedApp');
-    const refreshToken = await getDataFromAsyncStorage('refreshToken');
+    setIsLoading(true);
+    try {
+      const userHasOpenedApp = await getDataFromAsyncStorage('userHasOpenedApp');
 
-    if (refreshToken) {
-      // User is logged in, redirect to home
-      router.replace('/screens/home');
-    } else if (userHasOpenedApp) {
-      // User has seen onboarding but not logged in, redirect to login
-      router.replace('/screens/login');
-    } else {
-      // New user, show onboarding
-      setShowOnboarding(true);
-      saveDataToAsyncStorage('userHasOpenedApp', true);
+      const refreshToken = await getDataFromAsyncStorage('refreshToken');
+
+      if (refreshToken) {
+        // User is logged in, redirect to home
+        router.replace('/screens/home');
+      } else if (userHasOpenedApp) {
+        // User has seen onboarding but not logged in, redirect to login
+        router.replace('/screens/login');
+      } else {
+        // New user, show onboarding
+        setShowOnboarding(true);
+        await saveDataToAsyncStorage('userHasOpenedApp', true);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('🔍 Error in checkUserStatus:', error);
+      setIsLoading(false);
     }
+  }
+
+  // Render splash screen while loading
+  if (isLoading) {
+    return (
+      <View style={styles.splashContainer}>
+        <Image
+          source={require('../assets/trans.png')}
+          style={styles.splashImage}
+          resizeMode="contain"
+        />
+      </View>
+    );
   }
 
   const onboardData = [
     {
-      desc: 'Get real-time personalized updates and navigation',
+      desc: 'Watch Ads, Earn Rewards, Pay Less',
       isSelected: true,
-      source: 'map',
     },
     {
-      desc: 'Avoid traffic, danger and  navigate with the best route',
+      desc: 'Happy Business, Happy User',
       isSelected: false,
-      source: 'route',
     },
     {
-      desc: 'contribute, interact, navigate and earn points',
+      desc: 'contribute, interact, and earn points',
       isSelected: false,
-      source: 'earn',
     },
   ];
 
-  // Function to handle swipe gestures
-  const handleSwipe = (direction: any) => {
-    if (direction === 'left' && currentIndex < onboardData.length - 1) {
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }],
+    };
+  });
+
+  const handleGesture = (event: any) => {
+    const { translationX } = event.nativeEvent;
+    translateX.value = translationX;
+  };
+
+  const handleGestureEnd = (event: any) => {
+    const { translationX } = event.nativeEvent;
+
+    translateX.value = withSpring(0); // Reset position with spring animation
+
+    if (translationX < -50 && currentIndex < onboardData.length - 1) {
+      // Swipe left
       setCurrentIndex(currentIndex + 1);
-    } else if (direction === 'right' && currentIndex > 0) {
+    } else if (translationX > 50 && currentIndex > 0) {
+      // Swipe right
       setCurrentIndex(currentIndex - 1);
     }
   };
 
-  // This triggers when swipe completes
-  const onHandlerStateChange = (event: any) => {
-    const { translationX, state } = event.nativeEvent;
-
-    if (state === State.END) {
-      if (translationX < -100) {
-        handleSwipe('left');
-      } else if (translationX > 100) {
-        handleSwipe('right');
-      }
-    }
-  };
-
-  const currentItem = onboardData[currentIndex];
-
   const dotItems = onboardData.map((item, index) => (
     <View
       key={index}
-      style={[styles.circle, index === currentIndex ? styles.filled : styles.empty]}></View>
+      style={[styles.circle, index === currentIndex ? styles.filled : styles.empty]}
+    />
   ));
-
-  if (!showOnboarding) {
-    // Return null while checking user status
-    return null;
-  }
 
   return (
     <>
       <Stack.Screen options={{ title: 'Onboard', headerShown: false }} />
-      <SafeAreaView style={styles.container}>
-        <View style={styles.circleContainer}>{dotItems}</View>
+      <ImageBackground
+        source={require('../assets/onboard.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover">
+        <SafeAreaView style={styles.container}>
+          <PanGestureHandler onGestureEvent={handleGesture} onEnded={handleGestureEnd}>
+            <Animated.View style={[styles.contentContainer, animatedStyle]}>
+              <View style={styles.bottomContentContainer}>
+                <Text style={styles.introText}>{onboardData[currentIndex].desc}</Text>
 
-        {/* Gesture Handler */}
-        <PanGestureHandler onHandlerStateChange={onHandlerStateChange}>
-          <Animated.View style={{ width: '100%', alignItems: 'center' }}>
-            <Image
-              source={
-                currentItem.source === 'map'
-                  ? require('../assets/map.png')
-                  : currentItem.source === 'route'
-                    ? require('../assets/route.png')
-                    : require('../assets/earn.png')
-              }
-              resizeMode="contain"
-              style={styles.imageStyle}
-            />
-            <Text style={styles.introText}>{currentItem.desc}</Text>
-          </Animated.View>
-        </PanGestureHandler>
+                <View style={styles.circleContainer}>{dotItems}</View>
 
-        <View style={styles.buttonContainers}>
-          <AppButton title={'Login'} color={'Light'} link={'/screens/login'} />
-        </View>
-      </SafeAreaView>
+                <View style={styles.buttonContainers}>
+                  <AppButton title={'Login'} color={'Dark'} link={'/screens/login'} />
+                </View>
+              </View>
+            </Animated.View>
+          </PanGestureHandler>
+        </SafeAreaView>
+      </ImageBackground>
     </>
   );
 }
 
-export default OnBoardScreen;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingLeft: 20,
-    paddingRight: 20,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 24,
+  },
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FDF6E6',
+  },
+  splashImage: {
+    width: '90%',
+    height: '90%',
+  },
+
+  backgroundImage: {
+    flex: 1,
+    width: '40%',
+    height: '40%',
+  },
+  contentContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flex: 1,
+  },
+  bottomContentContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 56,
   },
   circleContainer: {
     width: '100%',
-    height: 50,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
+    marginTop: 28,
   },
   circle: {
     width: 12,
     height: 12,
-    backgroundColor: '#B71C1C',
     borderRadius: 6,
   },
   filled: {
@@ -158,26 +188,22 @@ const styles = StyleSheet.create({
   empty: {
     backgroundColor: '#D9D9D9',
   },
-  imageStyle: {
-    width: 250,
-    height: 250,
-    marginTop: 90,
-  },
   introText: {
     fontFamily: 'Inter-VariableFont',
     width: '100%',
-    fontSize: 21,
+    fontSize: 24,
     fontStyle: 'normal',
     lineHeight: 32,
-    color: '#000000',
+    color: '#FDF6E6',
     fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 50,
+    // textAlign: 'center',
+    paddingTop: 29,
+    borderRadius: 10,
+    alignItems: 'center',
   },
   buttonContainers: {
     width: '100%',
-    marginTop: 110,
-    gap: 20,
+    marginTop: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },

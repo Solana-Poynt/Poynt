@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Poynt",
+    "slug": "Poynt",
+    "version": "1.0.0",
+    "scheme": "com.alphar33.Poynt",
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/logs.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
+          "recordAudioAndroid": true
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "tsconfigPaths": true
+    },
+    "orientation": "portrait",
+    "icon": "./assets/logs.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/trans.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FDF6E6"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/ts2.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.alphar33.Poynt",
+      "googleServicesFile": false
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "6e5b05bf-58b6-467c-afa3-4f126091ec35"
+      }
+    },
+    "assets": ["./assets/trans.png"]
+  }
+}
