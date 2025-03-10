@@ -14,7 +14,9 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Mapbox from '@rnmapbox/maps';
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_CODE || '');
-import { EXPO_PUBLIC_FOURSQUARE_API_KEY } from '@env';
+// import { EXPO_PUBLIC_FOURSQUARE_API_KEY } from '@env';
+
+const EXPO_PUBLIC_FOURSQUARE_API_KEY : any = process.env.EXPO_PUBLIC_FOURSQUARE_API_KEY;
 
 const FOURSQUARE_API_KEY = EXPO_PUBLIC_FOURSQUARE_API_KEY;
 

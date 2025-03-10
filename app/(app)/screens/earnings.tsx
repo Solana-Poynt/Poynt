@@ -164,7 +164,7 @@ function EarningsScreen() {
               <View style={styles.display}>
                 <Text style={styles.displayText}>Your Earning</Text>
                 <View style={styles.earningValueContainer}>
-                  <Image source={require('../../../assets/coin.png')} resizeMode="contain" />
+                  {/* <Image source={require('../../../assets/coin.png')} resizeMode="contain" /> */}
                   <Text style={styles.earning}>0</Text>
                 </View>
               </View>
@@ -172,7 +172,7 @@ function EarningsScreen() {
               <View style={styles.display}>
                 <Text style={styles.displayText}>Today's Earning</Text>
                 <View style={styles.earningValueContainer}>
-                  <Image source={require('../../../assets/coin.png')} resizeMode="contain" />
+                  {/* <Image source={require('../../../assets/coin.png')} resizeMode="contain" /> */}
                   <Text style={styles.earning}>0</Text>
                 </View>
               </View>

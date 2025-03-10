@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 12.5.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "test": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_KEY": "{{secrets.EXPO_PUBLIC_API_KEY}}",
+        "EXPO_PUBLIC_CODE": "{{secrets.EXPO_PUBLIC_CODE}}",
+        "EXPO_PUBLIC_FOURSQUARE_API_KEY": "{{secrets.EXPO_PUBLIC_FOURSQUARE_API_KEY}}",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "{{secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID}}",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "{{secrets.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID}}",
+        "EXPO_PUBLIC_OKTO_CLIENT_API": "{{secrets.EXPO_PUBLIC_OKTO_CLIENT_API}}",
+        "EXPO_PUBLIC_RN_MAPCODE": "{{secrets.EXPO_PUBLIC_RN_MAPCODE}}"
+      }
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_KEY": "{{secrets.EXPO_PUBLIC_API_KEY}}",
+        "EXPO_PUBLIC_CODE": "{{secrets.EXPO_PUBLIC_CODE}}",
+        "EXPO_PUBLIC_FOURSQUARE_API_KEY": "{{secrets.EXPO_PUBLIC_FOURSQUARE_API_KEY}}",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "{{secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID}}",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "{{secrets.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID}}",
+        "EXPO_PUBLIC_OKTO_CLIENT_API": "{{secrets.EXPO_PUBLIC_OKTO_CLIENT_API}}",
+        "EXPO_PUBLIC_RN_MAPCODE": "{{secrets.EXPO_PUBLIC_RN_MAPCODE}}"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

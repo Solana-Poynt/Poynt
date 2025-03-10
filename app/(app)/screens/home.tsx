@@ -1,447 +1,582 @@
 import { router, Stack } from 'expo-router';
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  FlatList,
+  ImageBackground,
+  Animated,
+  Dimensions,
+  StatusBar,
+  Modal,
+  ListRenderItemInfo,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import AntDesign from '@expo/vector-icons/AntDesign';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useWeatherInfo, useWeatherAnalysis } from '~/hooks/useLocation';
-import PulsingLoadingCard from '~/components/Loader';
-import { useGetUserQuery } from '../../../store/api/api';
-import IconCircleProgress from '~/components/icons/icons';
-import { IUser } from '~/app/interfaces/interfaces';
+import { LinearGradient } from 'expo-linear-gradient';
+import { campaignData, Campaign, Task } from '../../../components/data/campaignData';
+// Import react-native-video instead of expo-av
+import Video from 'react-native-video';
+
+const { height, width } = Dimensions.get('window');
+
+// Interface for user progress state
+interface UserProgress {
+  [campaignIndex: number]: {
+    completedTasks: number[];
+  };
+}
+
+// Interface for video playback state
+interface VideoPlaybackState {
+  [key: number]: boolean;
+}
 
 const Home: React.FC = () => {
-  const { currentWeather, isLoading, userTime, refreshWeather } = useWeatherInfo();
-  const {
-    heatPrediction,
-    rainPrediction,
-    uvPrediction,
-    windPrediction,
-    visibilityPrediction,
-    extremePrediction,
-  } = useWeatherAnalysis(currentWeather);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [taskPanelVisible, setTaskPanelVisible] = useState<boolean>(false);
+  const [detailsPanelVisible, setDetailsPanelVisible] = useState<boolean>(false);
+  const [userProgress, setUserProgress] = useState<UserProgress>({});
+  const [expandedDescription, setExpandedDescription] = useState<boolean>(false);
+  const [likeCount, setLikeCount] = useState<number>(12543);
+  const [isLiked, setIsLiked] = useState<boolean>(false);
 
-  const currentLocation = currentWeather
-    ? `${currentWeather.name}, ${currentWeather.region},`
-    : 'Location unavailable';
+  // State to track paused videos
+  const [videoPaused, setVideoPaused] = useState<VideoPlaybackState>({});
+  // State to track if controls should be shown
+  const [controlsVisible, setControlsVisible] = useState<boolean>(false);
 
-  const toggleModal = () => {
-    setModalVisible(!modalVisible);
+  const slideAnimation = useRef<Animated.Value>(new Animated.Value(height)).current;
+  const detailsAnimation = useRef<Animated.Value>(new Animated.Value(height)).current;
+
+  // References for videos
+  const videoRefs = useRef<{ [key: number]: any }>({});
+
+  // Clean up videos when component unmounts
+  useEffect(() => {
+    return () => {
+      // Cleanup logic for video resources
+      videoRefs.current = {};
+    };
+  }, []);
+
+  // Effect to handle current video playback
+  useEffect(() => {
+    const newPausedState = { ...videoPaused };
+    // Logic to ensure we play only the current video
+    Object.keys(videoRefs.current).forEach((key) => {
+      const index = Number(key);
+      newPausedState[index] = index !== currentIndex;
+    });
+    setVideoPaused(newPausedState);
+  }, [currentIndex]);
+
+  // Handle video play/pause toggle
+  const toggleVideoPlayback = (index: number) => {
+    setControlsVisible(true);
+    setVideoPaused((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+
+    // Auto-hide controls after 2 seconds
+    setTimeout(() => {
+      setControlsVisible(false);
+    }, 2000);
   };
 
-  //MAKE CALL TO BACKEND TO FTECH USER DATA
-  let user: IUser | null;
-  const { data: userData, isLoading: userIsLoading, error: userError } = useGetUserQuery();
-  user = userIsLoading ? null : (userData?.data ?? null);
+  // Handle task panel slide up/down
+  const toggleTaskPanel = (): void => {
+    if (taskPanelVisible) {
+      // Slide down
+      Animated.timing(slideAnimation, {
+        toValue: height,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setTaskPanelVisible(false));
+    } else {
+      // Slide up
+      setTaskPanelVisible(true);
+      Animated.timing(slideAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // Handle details panel slide up/down
+  const toggleDetailsPanel = (): void => {
+    if (detailsPanelVisible) {
+      // Slide down
+      Animated.timing(detailsAnimation, {
+        toValue: height,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setDetailsPanelVisible(false));
+    } else {
+      // Slide up
+      setDetailsPanelVisible(true);
+      Animated.timing(detailsAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // Function to handle like button press
+  const handleLikePress = (): void => {
+    setIsLiked(!isLiked);
+    setLikeCount(isLiked ? likeCount - 1 : likeCount + 1);
+  };
+
+  // Function to navigate to external actions
+  const handleTaskAction = (task: Task): void => {
+    console.log(`Navigate to: ${task.url} for task: ${task.description}`);
+    // Here you would implement deep linking to the required app/website
+    // For example: Linking.openURL(task.url);
+
+    // For the MVP, we'll just simulate task completion
+    const newProgress: UserProgress = { ...userProgress };
+    if (!newProgress[currentIndex]) {
+      newProgress[currentIndex] = { completedTasks: [] };
+    }
+
+    if (!newProgress[currentIndex].completedTasks.includes(task.id)) {
+      newProgress[currentIndex].completedTasks.push(task.id);
+      setUserProgress(newProgress);
+    }
+
+    // Close the task panel
+    toggleTaskPanel();
+  };
+
+  // Function to get task completion status
+  const isTaskCompleted = (taskId: number): boolean => {
+    return userProgress[currentIndex]?.completedTasks?.includes(taskId) || false;
+  };
+
+  // Function to get campaign completion count
+  const getCompletionCount = (index: number): number => {
+    if (!userProgress[index] || !userProgress[index].completedTasks) {
+      return 0;
+    }
+    return userProgress[index].completedTasks.length;
+  };
+
+  // Handle when a new campaign is in view
+  const handleViewableItemsChanged = React.useCallback(
+    ({ viewableItems }: { viewableItems: any[] }) => {
+      if (viewableItems.length > 0) {
+        const newIndex = viewableItems[0].index;
+        setCurrentIndex(newIndex);
+      }
+    },
+    []
+  );
+
+  // Render each campaign item
+  const renderCampaignItem = ({
+    item,
+    index,
+  }: ListRenderItemInfo<Campaign>): React.ReactElement => {
+    const isCompleted = getCompletionCount(index) === item.tasks.length;
+    const progress = getCompletionCount(index);
+    const totalTasks = item.tasks.length;
+
+    // Check if the campaign has a video instead of an image
+    const isVideo = item.mediaType === 'video';
+
+    // Check if this video is paused
+    const isPaused = videoPaused[index] === true;
+
+    return (
+      <View style={styles.campaignContainer}>
+        {isVideo ? (
+          // Video background using react-native-video
+          <View style={styles.videoContainer}>
+            <TouchableWithoutFeedback onPress={() => toggleVideoPlayback(index)}>
+              <View style={styles.videoWrapper}>
+                <Video
+                  ref={(ref) => {
+                    videoRefs.current[index] = ref;
+                  }}
+                  source={{ uri: item.videoUrl }}
+                  style={styles.videoBackground}
+                  resizeMode={'cover'}
+                  repeat={true}
+                  paused={isPaused}
+                  muted={false}
+                  onError={(e) => console.log('Video error:', e)}
+                  onLoad={() => console.log(`Video ${index} loaded`)}
+                  rate={1.0}
+                  playInBackground={false}
+                  playWhenInactive={false}
+                />
+
+                {/* Play/Pause Button Overlay (visible when video is paused or controls are shown) */}
+                {(isPaused || controlsVisible) && (
+                  <View style={styles.playButtonOverlay}>
+                    <TouchableOpacity
+                      style={styles.playButton}
+                      onPress={() => toggleVideoPlayback(index)}>
+                      <Ionicons name={isPaused ? 'play' : 'pause'} size={40} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
+                  style={styles.overlay}
+                />
+
+                {/* Campaign content */}
+                <SafeAreaView style={styles.contentContainer}>
+                  {/* Top section - Business info and search/filter - Spotify style */}
+                  <View style={styles.headerContainer}>
+                    <TouchableOpacity
+                      style={styles.spotifyLogoContainer}
+                      onPress={toggleDetailsPanel}>
+                      <Text style={styles.spotifyText}>{item.businessName}</Text>
+                      <Ionicons name="information-circle" size={18} color="white" />
+                    </TouchableOpacity>
+
+                    <View style={styles.searchFilterContainer}>
+                      <TouchableOpacity style={styles.searchButton}>
+                        <Ionicons name="search" size={22} color="white" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.menuButton}>
+                        <Ionicons name="menu" size={22} color="white" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Bottom section - Campaign details */}
+                  <View style={styles.bottomSection}>
+                    <Text style={styles.campaignName}>{item.campaignName}</Text>
+
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => setExpandedDescription(!expandedDescription)}
+                      style={styles.descriptionContainer}>
+                      <Text
+                        style={styles.campaignDescription}
+                        numberOfLines={expandedDescription ? undefined : 2}>
+                        {item.description}
+                        {!expandedDescription && item.description.length > 90 && (
+                          <Text style={styles.moreText}> ... more</Text>
+                        )}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Side actions */}
+                  <View style={styles.sideActionsContainer}>
+                    <TouchableOpacity style={styles.sideActionButton} onPress={toggleTaskPanel}>
+                      <View style={styles.trophyContainer}>
+                        <Ionicons
+                          name={isCompleted ? 'trophy' : 'trophy-outline'}
+                          size={28}
+                          color={isCompleted ? '#A71919' : 'white'}
+                        />
+                        <View style={styles.progressCircle}>
+                          {[...Array(totalTasks)].map((_, i) => (
+                            <View
+                              key={i}
+                              style={[
+                                styles.progressDot,
+                                i < progress ? styles.progressDotCompleted : {},
+                              ]}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.sideActionButton} onPress={handleLikePress}>
+                      <Ionicons
+                        name={isLiked ? 'heart' : 'heart-outline'}
+                        size={28}
+                        color={isLiked ? '#A71919' : 'white'}
+                      />
+                      <Text style={styles.sideActionText}>{likeCount}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.sideActionButton}>
+                      <Ionicons name="share-social-outline" size={28} color="white" />
+                      <Text style={styles.sideActionText}>Share</Text>
+                    </TouchableOpacity>
+                  </View>
+                </SafeAreaView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        ) : (
+          // Image background
+          <ImageBackground source={{ uri: item.imageUrl }} style={styles.campaignBackground}>
+            {/* Semi-transparent overlay for better text readability */}
+            <LinearGradient
+              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
+              style={styles.overlay}
+            />
+
+            {/* Campaign content */}
+            <SafeAreaView style={styles.contentContainer}>
+              {/* Top section - Business info and search/filter - Spotify style */}
+              <View style={styles.headerContainer}>
+                <TouchableOpacity style={styles.spotifyLogoContainer} onPress={toggleDetailsPanel}>
+                  <Text style={styles.spotifyText}>{item.businessName}</Text>
+                  <Ionicons name="information-circle" size={18} color="white" />
+                </TouchableOpacity>
+
+                <View style={styles.searchFilterContainer}>
+                  <TouchableOpacity style={styles.searchButton}>
+                    <Ionicons name="search" size={22} color="white" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.menuButton}>
+                    <Ionicons name="menu" size={22} color="white" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Bottom section - Campaign details */}
+              <View style={styles.bottomSection}>
+                <Text style={styles.campaignName}>{item.campaignName}</Text>
+
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setExpandedDescription(!expandedDescription)}
+                  style={styles.descriptionContainer}>
+                  <Text
+                    style={styles.campaignDescription}
+                    numberOfLines={expandedDescription ? undefined : 2}>
+                    {item.description}
+                    {!expandedDescription && item.description.length > 90 && (
+                      <Text style={styles.moreText}> ... more</Text>
+                    )}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Side actions */}
+              <View style={styles.sideActionsContainer}>
+                <TouchableOpacity style={styles.sideActionButton} onPress={toggleTaskPanel}>
+                  <View style={styles.trophyContainer}>
+                    <Ionicons
+                      name={isCompleted ? 'trophy' : 'trophy-outline'}
+                      size={28}
+                      color={isCompleted ? '#A71919' : 'white'}
+                    />
+                    <View style={styles.progressCircle}>
+                      {[...Array(totalTasks)].map((_, i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.progressDot,
+                            i < progress ? styles.progressDotCompleted : {},
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.sideActionButton} onPress={handleLikePress}>
+                  <Ionicons
+                    name={isLiked ? 'heart' : 'heart-outline'}
+                    size={28}
+                    color={isLiked ? '#A71919' : 'white'}
+                  />
+                  <Text style={styles.sideActionText}>{likeCount}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.sideActionButton}>
+                  <Ionicons name="share-social-outline" size={28} color="white" />
+                  <Text style={styles.sideActionText}>Share</Text>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </ImageBackground>
+        )}
+      </View>
+    );
+  };
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Onboard', headerShown: false }} />
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.giftButton}>
-            <View style={styles.giftIcon}>
-              <Ionicons name="gift" size={19} color="black" />
-            </View>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar barStyle="light-content" backgroundColor="black" />
 
-            <Text style={styles.giftText}>coming soon!</Text>
-          </TouchableOpacity>
-          {/* <TouchableOpacity>
-            <Ionicons name="notifications" size={24} color="" />
-          </TouchableOpacity> */}
-        </View>
-        <Text style={styles.greeting}>Hello, {user?.name && user?.name}</Text>
+      {/* Main campaign feed */}
+      <View style={styles.container}>
+        <FlatList
+          data={campaignData}
+          renderItem={renderCampaignItem}
+          keyExtractor={(item) => item.id.toString()}
+          pagingEnabled
+          snapToInterval={height}
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={false}
+          onViewableItemsChanged={handleViewableItemsChanged}
+          viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
+          onMomentumScrollEnd={(event) => {
+            const newIndex = Math.round(event.nativeEvent.contentOffset.y / height);
+            setCurrentIndex(newIndex);
+          }}
+        />
+      </View>
 
-        <View style={styles.timerContainer}>
-          <Text style={{ fontSize: 13, marginLeft: 8, marginTop: 12 }}>{userTime}</Text>
-
-          <Text style={styles.balance}>poynts</Text>
-        </View>
-
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <PulsingLoadingCard />
-          </View>
-        ) : (
-          <View style={{ marginBottom: 16 }}>
-            <View style={styles.locationCard}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}>
-                <Text style={styles.locationTitle}>Current Location</Text>
-                <Text style={styles.weatherTitle}>Traffic</Text>
+      {/* Tasks Panel Modal */}
+      {taskPanelVisible && (
+        <Modal
+          transparent={true}
+          visible={taskPanelVisible}
+          animationType="none"
+          onRequestClose={toggleTaskPanel}>
+          <Animated.View
+            style={[styles.taskPanelContainer, { transform: [{ translateY: slideAnimation }] }]}>
+            <View style={styles.taskPanelContent}>
+              <View style={styles.taskPanelHeader}>
+                <Text style={styles.taskPanelTitle}>Campaign Tasks</Text>
+                <TouchableOpacity onPress={toggleTaskPanel}>
+                  <Ionicons name="close-circle" size={28} color="#666" />
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.locationInfo}>
-                <View style={{ flexDirection: 'column' }}>
-                  <Text style={styles.locationName}>{currentLocation}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={styles.locationName}>{currentWeather?.country}</Text>
-                    <TouchableOpacity onPress={toggleModal} style={styles.infoButton}>
-                      <Ionicons name="information-circle" size={20} color="#E9B9B9" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <View style={styles.otherInfo}>
-                  <View>
-                    <Text style={styles.traffic}></Text>
-                  </View>
-                </View>
-              </View>
-              {/* /////////////////// */}
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                }}>
-                <Text style={styles.weatherTitle}>Weather</Text>
-                <Text style={styles.weatherTitle}>Condition</Text>
-              </View>
-              <View style={styles.weatherInfo}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 5,
-                  }}>
-                  <Text style={styles.temperature}>{currentWeather?.temp_c}°C</Text>
-                  <Image
-                    source={{ uri: `https:${currentWeather?.icon}` }}
-                    style={{ width: 40.32, height: 40.32 }}
-                  />
-                </View>
+              <View style={styles.tasksList}>
+                {campaignData[currentIndex]?.tasks.map((task) => (
+                  <TouchableOpacity
+                    key={task.id}
+                    style={[
+                      styles.taskItem,
+                      isTaskCompleted(task.id) ? styles.taskItemCompleted : {},
+                    ]}
+                    onPress={() => handleTaskAction(task)}
+                    disabled={isTaskCompleted(task.id)}>
+                    <View style={styles.taskIconWrapper}>
+                      {isTaskCompleted(task.id) ? (
+                        <Ionicons name="checkmark-circle" size={24} color="#00C853" />
+                      ) : (
+                        <View style={styles.taskIcon}>
+                          <Text style={styles.taskIconText}>{task.id}</Text>
+                        </View>
+                      )}
+                    </View>
 
-                <Text
-                  style={{
-                    fontSize: 16,
-                    color: 'white',
-                    fontWeight: '600',
-                  }}>
-                  {currentWeather?.condition}
+                    <View style={styles.taskInfo}>
+                      <Text style={styles.taskTitle}>{task.description}</Text>
+                      <Text style={styles.taskPoints}>+{task.points} points</Text>
+                    </View>
+
+                    <Ionicons
+                      name={isTaskCompleted(task.id) ? 'checkmark' : 'arrow-forward'}
+                      size={24}
+                      color={isTaskCompleted(task.id) ? '#00C853' : '#B71C1C'}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.totalPoints}>
+                <Text style={styles.totalPointsText}>
+                  Total: {campaignData[currentIndex]?.points} points
                 </Text>
               </View>
             </View>
+          </Animated.View>
+        </Modal>
+      )}
 
-            <View style={styles.cardPart}></View>
-          </View>
-        )}
+      {/* Details Panel Modal */}
+      {detailsPanelVisible && (
+        <Modal
+          transparent={true}
+          visible={detailsPanelVisible}
+          animationType="none"
+          onRequestClose={toggleDetailsPanel}>
+          <Animated.View
+            style={[
+              styles.detailsPanelContainer,
+              { transform: [{ translateY: detailsAnimation }] },
+            ]}>
+            <View style={styles.detailsPanelContent}>
+              <View style={styles.detailsPanelHeader}>
+                <Text style={styles.detailsPanelTitle}>Campaign Details</Text>
+                <TouchableOpacity onPress={toggleDetailsPanel}>
+                  <Ionicons name="close-circle" size={28} color="#666" />
+                </TouchableOpacity>
+              </View>
 
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'flex-end',
-            alignContent: 'center',
-            marginTop: 2,
-          }}>
-          <TouchableOpacity onPress={refreshWeather} style={{}}>
-            <Ionicons name="refresh-circle" size={32} color="#A71919" />
-          </TouchableOpacity>
-        </View>
+              <View style={styles.detailsContent}>
+                <Text style={styles.detailsCampaignName}>
+                  {campaignData[currentIndex]?.campaignName}
+                </Text>
+                <Text style={styles.detailsBusinessName}>
+                  by {campaignData[currentIndex]?.businessName}
+                </Text>
 
-        {/* Places And all  */}
-        <View style={{ marginBottom: 16, marginTop: 32 }}>
-          <View style={styles.savedPlace}>
-            <View style={styles.addPlace}>
-              <Ionicons name="car-sport" size={22} color="black" />
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: '700',
-                }}>
-                Ready to go?
-              </Text>
+                <View style={styles.detailsInfoRow}>
+                  <View style={styles.detailsInfoItem}>
+                    <Ionicons name="calendar" size={20} color="#666" />
+                    <Text style={styles.detailsInfoText}>
+                      Ends: {campaignData[currentIndex]?.endDate}
+                    </Text>
+                  </View>
 
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderRadius: 32,
-                  padding: 3,
-                  borderColor: '#eeeeee',
-                  backgroundColor: '#eeeeee',
-                }}>
-                <TouchableOpacity onPress={() => router.push('/screens/navigate')}>
-                  <Ionicons name="arrow-forward" size={24} color="black" />
+                  <View style={styles.detailsInfoItem}>
+                    <Ionicons name="people" size={20} color="#666" />
+                    <Text style={styles.detailsInfoText}>
+                      {campaignData[currentIndex]?.totalParticipants} participants
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.detailsInfoRow}>
+                  <View style={styles.detailsInfoItem}>
+                    <Ionicons name="trophy" size={20} color="#666" />
+                    <Text style={styles.detailsInfoText}>
+                      {campaignData[currentIndex]?.points} points
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailsInfoItem}>
+                    <Ionicons name="pricetag" size={20} color="#666" />
+                    <Text style={styles.detailsInfoText}>
+                      {campaignData[currentIndex]?.category}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.detailsDescription}>
+                  {campaignData[currentIndex]?.description}
+                </Text>
+
+                <View style={styles.detailsTasksPreview}>
+                  <Text style={styles.detailsTasksTitle}>Tasks:</Text>
+                  {campaignData[currentIndex]?.tasks.map((task) => (
+                    <View key={task.id} style={styles.detailsTaskItem}>
+                      <Text style={styles.detailsTaskText}>• {task.description}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <TouchableOpacity
+                  style={styles.startCampaignButton}
+                  onPress={() => {
+                    toggleDetailsPanel();
+                    toggleTaskPanel();
+                  }}>
+                  <Text style={styles.startCampaignText}>Start Campaign</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            <View>
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: '500',
-                }}>
-                Ride Smart, Save Big with Poynt!
-              </Text>
-            </View>
-
-            {/* ////////////////////// */}
-          </View>
-          <View style={styles.placePart}></View>
-        </View>
-
-        {/* modal view  */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={toggleModal}>
-          <View style={styles.centeredView}>
-            <View style={styles.modalView}>
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: '700',
-                  textAlign: 'center',
-                }}>
-                Real Time Weather Information
-              </Text>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  justifyContent: 'space-between',
-                }}>
-                {/* ////heat prediction  */}
-                <View style={[styles.analysisText, styles.gridItem]}>
-                  <View
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      width: '100%',
-                      justifyContent: 'flex-start',
-                      paddingLeft: 12,
-                      alignItems: 'center',
-                      gap: 6,
-                    }}>
-                    <MaterialCommunityIcons name="sun-thermometer" size={25} color="#e27800" />
-                    <View
-                      style={{
-                        flexDirection: 'column',
-                        gap: 3,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: 'black',
-                        }}>
-                        Heat
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '300',
-                          color: 'black',
-                        }}>
-                        {heatPrediction}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* rain prediction  */}
-
-                <View style={[styles.analysisText, styles.gridItem]}>
-                  <View
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      width: '100%',
-                      justifyContent: 'flex-start',
-                      paddingLeft: 12,
-                      alignItems: 'center',
-                      gap: 6,
-                    }}>
-                    <Ionicons name="rainy-sharp" size={25} color="blue" />
-                    <View
-                      style={{
-                        flexDirection: 'column',
-                        gap: 3,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: 'black',
-                        }}>
-                        Rain
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '300',
-                          color: 'black',
-                        }}>
-                        {rainPrediction}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                {/* UV analysis */}
-                <View style={[styles.analysisText, styles.gridItem]}>
-                  <View
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      width: '100%',
-                      justifyContent: 'flex-start',
-                      paddingLeft: 12,
-                      alignItems: 'center',
-                      gap: 6,
-                    }}>
-                    <Ionicons name="sunny-sharp" size={25} color="red" />
-                    <View
-                      style={{
-                        flexDirection: 'column',
-                        gap: 3,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: 'black',
-                        }}>
-                        UV
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '300',
-                          color: 'black',
-                        }}>
-                        {uvPrediction}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={[styles.analysisText, styles.gridItem]}>
-                  <View
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      width: '100%',
-                      justifyContent: 'flex-start',
-                      paddingLeft: 12,
-                      alignItems: 'center',
-                      gap: 6,
-                    }}>
-                    <MaterialCommunityIcons name="weather-windy" size={25} color="black" />
-                    <View
-                      style={{
-                        flexDirection: 'column',
-                        gap: 3,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: 'black',
-                        }}>
-                        Wind
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '300',
-                          color: 'black',
-                        }}>
-                        {windPrediction}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                {/* visibility  */}
-
-                <View style={[styles.analysisText, styles.gridItem]}>
-                  <View
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      width: '100%',
-                      justifyContent: 'flex-start',
-                      paddingLeft: 12,
-                      alignItems: 'center',
-                      gap: 6,
-                    }}>
-                    <MaterialCommunityIcons name="eye-circle" size={25} color="green" />
-                    <View
-                      style={{
-                        flexDirection: 'column',
-                        gap: 3,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: 'black',
-                        }}>
-                        Visibility
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '300',
-                          color: 'black',
-                        }}>
-                        {visibilityPrediction}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* extreme  */}
-
-                <View style={[styles.analysisText, styles.gridItem]}>
-                  <View
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'row',
-                      width: '100%',
-                      justifyContent: 'flex-start',
-                      paddingLeft: 12,
-                      alignItems: 'center',
-                      gap: 6,
-                    }}>
-                    <MaterialCommunityIcons name="alert-box" size={25} color="#A71919" />
-                    <View
-                      style={{
-                        flexDirection: 'column',
-                        gap: 3,
-                      }}>
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '700',
-                          color: 'black',
-                        }}>
-                        Extreme
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: '300',
-                          color: 'black',
-                        }}>
-                        {extremePrediction}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              <TouchableOpacity style={styles.closeButton} onPress={toggleModal}>
-                <Text style={styles.textStyle}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </Animated.View>
         </Modal>
-      </SafeAreaView>
+      )}
     </>
   );
 };
@@ -449,333 +584,430 @@ const Home: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
   },
-  header: {
-    flexDirection: 'row',
+  campaignContainer: {
+    width: width,
+    height: height,
+  },
+  campaignBackground: {
+    flex: 1,
+    resizeMode: 'cover',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1, // Keep overlay above video but below controls
+  },
+  contentContainer: {
+    flex: 1,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  errorText: {
-    fontSize: 18,
-    color: 'red',
-    textAlign: 'center',
+    padding: 16,
+    zIndex: 2, // Keep content above overlay
   },
 
-  giftButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 20,
+  videoContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  giftIcon: {
-    backgroundColor: '#dad7cd',
-    padding: 4,
-    borderRadius: 40,
+  videoWrapper: {
+    flex: 1,
+    position: 'relative',
   },
-  giftText: {
-    marginLeft: 5,
-    color: 'black',
-  },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 32,
-  },
-
-  timerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  date: {
-    fontSize: 16,
-    color: '#666',
-  },
-  balance: {
-    fontSize: 14,
-    fontWeight: '900',
-    backgroundColor: '#F8E8E8',
-    paddingVertical: 4,
-    paddingHorizontal: 9,
-    borderRadius: 12,
-    justifyContent: 'center',
-    borderWidth: 1,
-    letterSpacing: 0.5,
-    borderColor: '#F8E8E8',
-    shadowColor: 'rgba(0, 0, 0, 0.10)',
-    shadowOffset: { width: 2, height: 4 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-    elevation: 25,
-  },
-
-  loadingContainer: {
-    marginTop: 10,
-  },
-
-  locationCard: {
-    flexDirection: 'column',
-    backgroundColor: '#A71919',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    marginTop: 8,
-    width: '100%',
-    zIndex: 2,
-    shadowColor: 'rgba(199, 72, 72, 0.25)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-  },
-
-  cardPart: {
-    backgroundColor: '#e5baba',
-    position: 'absolute',
-    width: '100%',
-    height: 32,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 21,
-    marginTop: 6,
-    bottom: -4.5,
-    zIndex: -2,
-    shadowColor: 'rgba(199, 72, 72, 0.25)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-  },
-  locationInfo: {
-    flexDirection: 'row',
-    alignContent: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 22,
-  },
-  weatherInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  locationTitle: {
-    color: '#DE9797',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  locationName: {
-    flexWrap: 'wrap',
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 5,
-  },
-
-  weatherIcon: {
+  videoBackground: {
     position: 'absolute',
     top: 0,
-    left: 62,
+    left: 0,
+    bottom: 0,
+    right: 0,
+    width: width,
+    height: height,
+    backgroundColor: '#000',
+  },
+  // Play button overlay
+  playButtonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 3, // Above overlay but below content
+  },
+  playButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
-  weatherTitle: {
-    color: '#DE9797',
-    fontSize: 12,
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  spotifyLogoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 30,
+  },
+  spotifyText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginRight: 6,
+  },
+  searchFilterContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 30,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  searchButton: {
+    marginRight: 15,
+  },
+  menuButton: {},
+
+  bottomSection: {
+    marginBottom: 50,
+    width: '80%',
+  },
+  campaignName: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  descriptionContainer: {
+    marginBottom: 12,
+  },
+  campaignDescription: {
+    color: 'white',
+    fontSize: 16,
+    lineHeight: 22,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0.5, height: 0.5 },
+    textShadowRadius: 2,
+  },
+  moreText: {
+    color: '#e0e0e0',
     fontWeight: '500',
+    fontSize: 15,
   },
-  temperature: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  weatherCondition: {
-    color: '#FFF',
-    fontSize: 14,
-  },
-
-  otherInfo: {
-    flexDirection: 'row',
-    marginTop: 6,
-    justifyContent: 'space-between',
-    // alignItems: 'center',
-  },
-
-  trafficInfo: {},
-  traffic: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  placeItem: {
-    flexDirection: 'row',
+  // Spotify-style side action buttons
+  sideActionsContainer: {
+    position: 'absolute',
+    right: 16,
+    top: '57%',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    padding: 4,
+    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 10,
+    zIndex: 4, // Keep above all other elements
   },
-  placeName: {
-    flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-  },
-  distanceInfo: {
-    flexDirection: 'row',
+  sideActionButton: {
     alignItems: 'center',
-    marginTop: 10,
+    marginBottom: 30,
   },
-  distanceText: {
-    marginLeft: 5,
-    marginRight: 10,
-  },
-  weatherText: {
-    marginLeft: 5,
-  },
-  activityIcons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  activityItem: {
+  spotifyActionButton: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
     alignItems: 'center',
-  },
-  activityTime: {
-    marginTop: 5,
-    fontSize: 12,
-  },
-  modalView: {
-    backgroundColor: '#edd1d1',
-    flexDirection: 'column',
-    gap: 20,
-    borderRadius: 20,
-    padding: 12,
-    margin: 10,
-    // alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 50,
-    maxHeight: '60%',
-  },
-
-  gridItem: {
-    width: '49%',
     marginBottom: 5,
   },
-  analysisText: {
-    backgroundColor: '#FCEAEA',
-    padding: 10,
-    borderRadius: 5,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 45,
-    borderBottomWidth: 3,
-    paddingBottom: 3,
-    borderBottomColor: 'white',
-  },
-  modalWeatherInfo: {
-    borderWidth: 3,
-    borderColor: 'white',
-    padding: 14,
-    borderRadius: 12,
-  },
-  modalText: {
-    marginBottom: 15,
-    // textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  closeButton: {
-    backgroundColor: '#A71919',
-    borderRadius: 20,
-    padding: 10,
-    elevation: 2,
-    // marginTop: 35,
-  },
-  textStyle: {
+  sideActionText: {
     color: 'white',
+    fontSize: 12,
+  },
+  likeCountText: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  infoButton: {
-    marginTop: 7,
   },
 
-  savedPlace: {
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 25,
-    backgroundColor: 'white',
-    flexDirection: 'column',
-    justifyContent: 'space-around',
-    shadowColor: '#0005',
-    shadowOffset: { width: 2, height: 4 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-    elevation: 14,
-    alignItems: 'center',
-    marginVertical: 18,
-  },
-
-  addPlace: {
+  taskButton: {
     flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    borderBottomWidth: 2,
-    paddingBottom: 12,
-    borderBottomColor: '#eeeeee',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    alignSelf: 'flex-start',
   },
-  placeText: {
-    fontSize: 14,
-    fontWeight: '600',
+  taskButtonCompleted: {
+    backgroundColor: 'rgba(0, 200, 83, 0.3)',
   },
-  placeIcons: {
-    flexDirection: 'column',
-    gap: 9,
+  taskIconContainer: {
+    marginRight: 8,
+  },
+  taskButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  trophyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    width: 52,
+    height: 52,
   },
-  placePart: {
-    backgroundColor: '#eeeeee',
+  progressCircle: {
     position: 'absolute',
     width: '100%',
-    height: 32,
+    height: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingBottom: 4,
+  },
+  progressDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 2,
+  },
+  progressDotCompleted: {
+    backgroundColor: '#A71919',
+  },
+  filterOverlay: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 21,
-    marginTop: 6,
-    bottom: 9,
-    zIndex: -2,
-    shadowColor: 'rgba(199, 72, 72, 0.25)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
+    width: 100,
+    padding: 4,
+    position: 'absolute',
+    top: 68,
+    right: 24,
+    zIndex: 10,
+  },
+  sliderContainer: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+  sliderItem: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+  },
+  sliderTrack: {
+    height: 3,
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 1.5,
+    position: 'relative',
+  },
+  sliderFill: {
+    position: 'absolute',
+    height: '100%',
+    width: '50%',
+    backgroundColor: 'white',
+    borderRadius: 1.5,
+  },
+  sliderKnob: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'white',
+    top: -5.5,
+    left: '50%',
+    marginLeft: -7,
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 100,
+    right: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  taskPanelContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  taskPanelContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    maxHeight: height * 0.7,
+  },
+  taskPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  taskPanelTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  tasksList: {
+    marginVertical: 16,
+  },
+  taskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 16,
+  },
+  taskItemCompleted: {
+    backgroundColor: '#E8F5E9',
+  },
+  taskIconWrapper: {
+    marginRight: 16,
+  },
+  taskIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#B71C1C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskIconText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  taskInfo: {
+    flex: 1,
+  },
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  taskPoints: {
+    fontSize: 14,
+    color: '#B71C1C',
+    fontWeight: 'bold',
+  },
+  totalPoints: {
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEEE',
+  },
+  totalPointsText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#B71C1C',
+  },
+  detailsPanelContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  detailsPanelContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    maxHeight: height * 0.8,
+  },
+  detailsPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  detailsPanelTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333333',
+  },
+  detailsContent: {
+    paddingVertical: 16,
+  },
+  detailsCampaignName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  detailsBusinessName: {
+    fontSize: 16,
+    color: '#666666',
+    marginBottom: 16,
+  },
+  detailsInfoRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  detailsInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  detailsInfoText: {
+    fontSize: 14,
+    color: '#666666',
+    marginLeft: 8,
+  },
+  detailsDescription: {
+    fontSize: 16,
+    color: '#333333',
+    lineHeight: 24,
+    marginVertical: 16,
+  },
+  detailsTasksPreview: {
+    marginVertical: 16,
+  },
+  detailsTasksTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 8,
+  },
+  detailsTaskItem: {
+    marginBottom: 8,
+  },
+  detailsTaskText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  startCampaignButton: {
+    backgroundColor: '#B71C1C',
+    paddingVertical: 16,
+    borderRadius: 30,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  startCampaignText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 
