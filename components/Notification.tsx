@@ -18,7 +18,7 @@ const Notification: React.FC<NotificationProps> = ({ message, status, switchShow
       switchShowOff();
     }, 4500);
 
-    return () => clearTimeout(timeoutId); // Cleanup on component unmount
+    return () => clearTimeout(timeoutId); 
   }, [switchShowOff]);
 
   const getIconName = () => {

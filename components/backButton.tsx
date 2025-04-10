@@ -7,7 +7,7 @@ export default function BackButton({ link }: IButton) {
   const router = useRouter();
 
   return (
-    <TouchableOpacity onPress={() => router.push({ pathname: link ? link : '/' })}>
+    <TouchableOpacity onPress={() => router.push({ pathname: link ? link : ('/' as any) })}>
       <Image
         source={require('../assets/back.png')}
         resizeMode="contain"
