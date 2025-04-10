@@ -1,55 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { getDataFromAsyncStorage } from '~/utils/localStorage.js';
+import { getDataFromAsyncStorage } from '~/utils/localStorage';
 
 export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
-
   const [navItems, setNavItems] = useState<any>([]);
-
-  // Function to fetch the role from AsyncStorage
-  const getUserRole = async () => {
-    try {
-      const role = await getDataFromAsyncStorage('role');
-
-      return role === 'driver' ? '/screens/contributeDriver' : '/screens/contributeUser';
-    } catch (error) {
-      console.error('Error fetching role from AsyncStorage:', error);
-      return '/screens/contributeUser'; // Default route if an error occurs
-    }
-  };
+  const isHomeScreen = pathname === '/screens/home';
 
   // Fetch role and set navigation items after the component mounts
   useEffect(() => {
     const setupNavigation = async () => {
-      const userPath = await getUserRole();
+      // const userPath = await getUserRole();
       setNavItems([
         {
           name: 'Feed',
           path: '/screens/home',
-          icon: 'videocam',
+          activeIcon: 'videocam',
+          inactiveIcon: 'videocam-outline',
         },
-        {
-          name: 'Explore',
-          path: '/screens/navigate',
-          icon: 'scan-sharp', 
-        },
+        // {
+        //   name: 'Explore',
+        //   path: '/screens/earns',
+        //   activeIcon: 'scan-sharp',
+        //   inactiveIcon: 'scan-outline',
+        // },
         {
           name: 'Notifications',
-          path: userPath,
-          icon: 'notifications',
+          path: '/screens/notifications',
+          activeIcon: 'medal',
+          inactiveIcon: 'medal-outline',
+        },
+        {
+          name: 'Wallet',
+          path: '/screens/wallet',
+          activeIcon: 'wallet',
+          inactiveIcon: 'wallet-outline',
         },
         {
           name: 'Profile',
           path: '/screens/profile',
-          icon: 'person-circle',
+          activeIcon: 'person-circle',
+          inactiveIcon: 'person-circle-outline',
         },
       ]);
     };
-
     setupNavigation(); // Call the async function to set navigation
   }, []);
 
@@ -57,7 +54,6 @@ export default function BottomNav() {
   async function isAuthenticated() {
     const accessToken = await getDataFromAsyncStorage('accessToken');
     const refreshToken = await getDataFromAsyncStorage('refreshToken');
-
     if (!accessToken && !refreshToken) {
       router.push({ pathname: '/screens/login' });
     }
@@ -71,20 +67,21 @@ export default function BottomNav() {
   }, []);
 
   return (
-    <View style={styles.navContainer}>
-      <View style={styles.tabBar}>
-        {navItems.map((item: any) => (
-          <TouchableOpacity
-            key={item.name}
-            onPress={() => router.push(item.path)}
-            style={styles.navItem}>
-            <Ionicons
-              name={item.icon}
-              size={28}
-              color={pathname === item.path ? '#B71C1C' : '#999999'}
-            />
-          </TouchableOpacity>
-        ))}
+    <View style={[styles.navContainer, !isHomeScreen && styles.whiteBackground]}>
+      <View style={[styles.tabBar, !isHomeScreen && styles.whiteTabBar]}>
+        {navItems.map((item: any) => {
+          const isActive = pathname === item.path;
+          const iconName = isActive ? item.activeIcon : item.inactiveIcon;
+
+          return (
+            <TouchableOpacity
+              key={item.name}
+              onPress={() => router.push(item.path)}
+              style={styles.navItem}>
+              <Ionicons name={iconName} size={26} color={isActive ? '#B71C1C' : '#666666'} />
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -96,8 +93,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 60,
-    
+    height: 70,
+  },
+  whiteBackground: {
+    backgroundColor: 'white',
   },
   tabBar: {
     flexDirection: 'row',
@@ -106,16 +105,41 @@ const styles = StyleSheet.create({
     width: '100%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    height: 60,
+    height: 70,
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: 0,
-   
+    paddingBottom: 10,
+    paddingTop: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  whiteTabBar: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
     height: 60,
-    width: 60,
+    width: 70,
+  },
+  navText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  activeText: {
+    color: '#B71C1C',
+    fontWeight: '800',
+  },
+  inactiveText: {
+    color: '#666666',
   },
 });

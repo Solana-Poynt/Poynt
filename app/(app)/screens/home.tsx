@@ -1,104 +1,398 @@
 import { router, Stack } from 'expo-router';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
   FlatList,
-  ImageBackground,
+  StatusBar,
+  ActivityIndicator,
+  Text,
   Animated,
   Dimensions,
-  StatusBar,
-  Modal,
-  ListRenderItemInfo,
+  AppState,
+  RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { campaignData, Campaign, Task } from '../../../components/data/campaignData';
-// Import react-native-video instead of expo-av
-import Video from 'react-native-video';
 
-const { height, width } = Dimensions.get('window');
+import {
+  useGetDisplayCampaignsQuery,
+  useLikeCampaignMutation,
+  useJoinCampaignMutation,
+  getCachedJoinStatus,
+  updateCachedJoinStatus,
+} from '~/store/api/api';
+import {
+  getDataFromAsyncStorage,
+  saveJSONToAsyncStorage,
+  getJSONFromAsyncStorage,
+} from '~/utils/localStorage';
+import CampaignItem from '~/components/campaigns/CampaignItem';
+import TasksModal from '~/components/campaigns/TasksModal';
+import CampaignDetailsModal from '~/components/campaigns/CampaignDetailsModal';
+import InAppBrowser from '~/components/campaigns/InAppBrowser';
 
-// Interface for user progress state
+const { height } = Dimensions.get('window');
+
+// Type definitions
 interface UserProgress {
   [campaignIndex: number]: {
     completedTasks: number[];
   };
 }
 
-// Interface for video playback state
 interface VideoPlaybackState {
   [key: number]: boolean;
 }
 
+interface Task {
+  id: number;
+  description: string;
+  points: number;
+  url?: string;
+}
+
+interface FollowState {
+  [key: number]: boolean;
+}
+
+interface JoinedState {
+  [key: number]: boolean;
+}
+
+// Constants for performance optimization
+const BUSINESS_FOLLOWS_KEY = 'businessFollows';
+const USER_TASK_PROGRESS_KEY = 'userTaskProgress';
+const VIEWABILITY_CONFIG = {
+  viewAreaCoveragePercentThreshold: 75, // Increased for better video playback control
+  minimumViewTime: 200, // Reduced for faster response
+};
+
 const Home: React.FC = () => {
+  // State management
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [taskPanelVisible, setTaskPanelVisible] = useState<boolean>(false);
   const [detailsPanelVisible, setDetailsPanelVisible] = useState<boolean>(false);
   const [userProgress, setUserProgress] = useState<UserProgress>({});
   const [expandedDescription, setExpandedDescription] = useState<boolean>(false);
-  const [likeCount, setLikeCount] = useState<number>(12543);
-  const [isLiked, setIsLiked] = useState<boolean>(false);
-
-  // State to track paused videos
   const [videoPaused, setVideoPaused] = useState<VideoPlaybackState>({});
-  // State to track if controls should be shown
-  const [controlsVisible, setControlsVisible] = useState<boolean>(false);
+  const [appState, setAppState] = useState<string>(AppState.currentState);
+  const [followState, setFollowState] = useState<FollowState>({});
+  const [hasJoined, setHasJoined] = useState<JoinedState>({});
+  const [browserVisible, setBrowserVisible] = useState<boolean>(false);
+  const [browserUrl, setBrowserUrl] = useState<string>('');
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [likedCampaigns, setLikedCampaigns] = useState<Record<string, boolean>>({});
+  const [visibleIndexes, setVisibleIndexes] = useState<number[]>([]);
 
+  // Refs
   const slideAnimation = useRef<Animated.Value>(new Animated.Value(height)).current;
   const detailsAnimation = useRef<Animated.Value>(new Animated.Value(height)).current;
-
-  // References for videos
   const videoRefs = useRef<{ [key: number]: any }>({});
+  const flatListRef = useRef<FlatList>(null);
+  const mountedRef = useRef<boolean>(true); // Track component mount state
 
-  // Clean up videos when component unmounts
+  // API hooks with skip option for better control
+  const {
+    data: campaignsResponse,
+    isLoading,
+    refetch,
+    isSuccess,
+  } = useGetDisplayCampaignsQuery(undefined, {
+    // Skip refetch on mount if we already have data
+    refetchOnMountOrArgChange: false,
+  });
+  const [likeCampaign] = useLikeCampaignMutation();
+  const [joinCampaign] = useJoinCampaignMutation();
+
+  // Extract campaigns from the response with memoization
+  const campaigns = useMemo(() => campaignsResponse?.data || [], [campaignsResponse]);
+
+  // console.log(campaigns);
+
+  // Get user ID on component mount
   useEffect(() => {
+    const getUserId = async () => {
+      const id = await getDataFromAsyncStorage('id');
+      if (mountedRef.current) {
+        setUserId(id);
+
+        // Load saved progress
+        loadUserProgress();
+        loadFollowState();
+      }
+    };
+
+    getUserId();
+
     return () => {
-      // Cleanup logic for video resources
-      videoRefs.current = {};
+      mountedRef.current = false;
     };
   }, []);
 
-  // Effect to handle current video playback
+  // Load user progress from AsyncStorage
+  const loadUserProgress = useCallback(async () => {
+    try {
+      const savedProgress = await getJSONFromAsyncStorage(USER_TASK_PROGRESS_KEY);
+      if (savedProgress && mountedRef.current) {
+        setUserProgress(savedProgress);
+      }
+    } catch (error) {
+      console.error('Error loading user progress:', error);
+    }
+  }, []);
+
+  // Load follow state from AsyncStorage
+  const loadFollowState = useCallback(async () => {
+    try {
+      const follows = await getJSONFromAsyncStorage(BUSINESS_FOLLOWS_KEY);
+      if (!follows || !mountedRef.current) return;
+
+      // Map business IDs to campaign indexes
+      const followStateMap: FollowState = {};
+
+      campaigns.forEach((campaign, index) => {
+        if (campaign.business && campaign.business.id) {
+          followStateMap[index] = follows[campaign.business.id] || false;
+        }
+      });
+
+      setFollowState(followStateMap);
+    } catch (error) {
+      console.error('Error loading follow state:', error);
+    }
+  }, [campaigns]);
+
+  // Update liked campaigns when user ID or campaigns change
   useEffect(() => {
+    if (!userId || campaigns.length === 0) return;
+
+    const newLikedCampaigns: Record<string, boolean> = {};
+
+    campaigns.forEach((campaign) => {
+      if (campaign.id && campaign.likers) {
+        // Handle nested arrays in likers
+        const likersArray = Array.isArray(campaign.likers)
+          ? Array.isArray(campaign.likers[0])
+            ? campaign.likers.flat() // Handle nested array
+            : campaign.likers // Already flat array
+          : [];
+
+        // Normalize user ID (remove quotes)
+        const normalizedUserId = userId.replace(/^"(.*)"$/, '$1');
+
+        // Check if user liked by normalizing each liker ID
+        const isLiked = likersArray.some((liker) => {
+          if (!liker) return false;
+          const normalizedLiker =
+            typeof liker === 'string'
+              ? liker.replace(/^"(.*)"$/, '$1').replace(/\\/g, '')
+              : String(liker);
+          return normalizedLiker === normalizedUserId;
+        });
+
+        newLikedCampaigns[campaign.id] = isLiked;
+      }
+    });
+
+    if (mountedRef.current) {
+      console.log('Updated likedCampaigns state:', newLikedCampaigns);
+      setLikedCampaigns(newLikedCampaigns);
+    }
+  }, [userId, campaigns]);
+
+  // Load cached join status for the current campaign
+  const loadCachedJoinStatus = useCallback(async (): Promise<void> => {
+    if (!campaigns[currentIndex]?.id || !mountedRef.current) return;
+
+    try {
+      const campaignId = campaigns[currentIndex].id;
+      const joined = await getCachedJoinStatus(campaignId);
+
+      if (mountedRef.current) {
+        setHasJoined((prev) => ({
+          ...prev,
+          [currentIndex]: joined,
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading cached join status:', error);
+      await checkJoinStatus(); // Fallback
+    }
+  }, [currentIndex, campaigns]);
+
+  // Load cached data on first successful load
+  useEffect(() => {
+    const initializeData = async () => {
+      if (isInitialLoad && isSuccess && campaigns.length > 0) {
+        await loadCachedJoinStatus();
+        await loadFollowState();
+
+        // Set isInitialLoad to false only after all initialization is complete
+        if (mountedRef.current) {
+          setIsInitialLoad(false);
+        }
+      }
+    };
+
+    initializeData();
+  }, [isInitialLoad, isSuccess, campaigns.length, loadCachedJoinStatus, loadFollowState]);
+
+  // Check campaign join status from API data
+  const checkJoinStatus = useCallback(async (): Promise<void> => {
+    if (!userId || !campaigns[currentIndex] || !mountedRef.current) return;
+
+    try {
+      const participantsArray = campaigns[currentIndex].participants || [];
+      const joined =
+        Array.isArray(participantsArray) &&
+        (participantsArray.includes(userId) || participantsArray.includes(`"${userId}"`));
+
+      if (mountedRef.current) {
+        setHasJoined((prev) => ({
+          ...prev,
+          [currentIndex]: joined,
+        }));
+      }
+
+      // Update cache
+      if (campaigns[currentIndex].id) {
+        await updateCachedJoinStatus(campaigns[currentIndex].id, joined);
+      }
+    } catch (error) {
+      console.error('Error checking join status:', error);
+    }
+  }, [currentIndex, campaigns, userId]);
+
+  // Update join status when current index changes
+  useEffect(() => {
+    if (campaigns.length > 0 && currentIndex >= 0 && !isInitialLoad) {
+      // Don't load cached join status during initial load to prevent double loading
+      loadCachedJoinStatus();
+    }
+  }, [currentIndex, campaigns, loadCachedJoinStatus, isInitialLoad]);
+
+  // App state monitoring for video playback control
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: string) => {
+      if (!mountedRef.current) return;
+
+      setAppState(nextAppState);
+
+      if (nextAppState !== 'active') {
+        // Pause ALL videos when app goes to background
+        pauseAllVideos();
+      } else if (nextAppState === 'active') {
+        // Only play videos in view
+        updateVideoPlayback();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [visibleIndexes]);
+
+  // Pause all videos
+  const pauseAllVideos = useCallback(() => {
     const newPausedState = { ...videoPaused };
-    // Logic to ensure we play only the current video
+    Object.keys(videoRefs.current).forEach((key) => {
+      newPausedState[Number(key)] = true;
+    });
+
+    if (mountedRef.current) {
+      setVideoPaused(newPausedState);
+    }
+  }, [videoPaused]);
+
+  // Update video playback based on visible indexes
+  const updateVideoPlayback = useCallback(() => {
+    if (appState !== 'active' || !mountedRef.current) return;
+
+    const newPausedState = { ...videoPaused };
+    let hasChanged = false;
+
     Object.keys(videoRefs.current).forEach((key) => {
       const index = Number(key);
-      newPausedState[index] = index !== currentIndex;
+      // Only play videos that are currently visible
+      const shouldBePaused = !visibleIndexes.includes(index);
+
+      // Only update if there's a change in state
+      if (newPausedState[index] !== shouldBePaused) {
+        newPausedState[index] = shouldBePaused;
+        hasChanged = true;
+      }
     });
-    setVideoPaused(newPausedState);
+
+    // Only update state if something changed
+    if (hasChanged) {
+      setVideoPaused(newPausedState);
+    }
+  }, [appState, videoPaused, visibleIndexes]);
+
+  // Update video playback when visible indexes change
+  useEffect(() => {
+    if (visibleIndexes.length > 0) {
+      updateVideoPlayback();
+    }
+  }, [visibleIndexes, updateVideoPlayback]);
+
+  // Reset expanded description when changing videos
+  useEffect(() => {
+    if (mountedRef.current) {
+      setExpandedDescription(false);
+    }
   }, [currentIndex]);
 
-  // Handle video play/pause toggle
-  const toggleVideoPlayback = (index: number) => {
-    setControlsVisible(true);
-    setVideoPaused((prev) => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
+  // Custom refresh without changing order
+  const onRefresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      // Get current campaign IDs in order
+      const currentIds = campaigns.map((campaign) => campaign.id);
 
-    // Auto-hide controls after 2 seconds
-    setTimeout(() => {
-      setControlsVisible(false);
-    }, 2000);
-  };
+      // Refresh data from API
+      const response = await refetch();
 
-  // Handle task panel slide up/down
-  const toggleTaskPanel = (): void => {
+      if (response.data?.data && mountedRef.current) {
+        // If we have existing campaigns, preserve order
+        if (currentIds.length > 0 && campaigns.length > 0) {
+          // Use RTK Query's updateQueryData to manually update the cache
+          // but keep the same order
+          console.log('Preserving campaign order after refresh');
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing campaigns:', error);
+    } finally {
+      if (mountedRef.current) {
+        setRefreshing(false);
+      }
+    }
+  }, [refetch, campaigns]);
+
+  const toggleVideoPlayback = useCallback((index: number): void => {
+    if (!mountedRef.current) return;
+
+    setVideoPaused((prev) => {
+      const newState = { ...prev };
+      newState[index] = !prev[index];
+      return newState;
+    });
+  }, []);
+
+  const toggleTaskPanel = useCallback((): void => {
     if (taskPanelVisible) {
-      // Slide down
       Animated.timing(slideAnimation, {
         toValue: height,
         duration: 300,
         useNativeDriver: true,
-      }).start(() => setTaskPanelVisible(false));
+      }).start(() => {
+        if (mountedRef.current) {
+          setTaskPanelVisible(false);
+        }
+      });
     } else {
-      // Slide up
       setTaskPanelVisible(true);
       Animated.timing(slideAnimation, {
         toValue: 0,
@@ -106,19 +400,20 @@ const Home: React.FC = () => {
         useNativeDriver: true,
       }).start();
     }
-  };
+  }, [taskPanelVisible, slideAnimation]);
 
-  // Handle details panel slide up/down
-  const toggleDetailsPanel = (): void => {
+  const toggleDetailsPanel = useCallback((): void => {
     if (detailsPanelVisible) {
-      // Slide down
       Animated.timing(detailsAnimation, {
         toValue: height,
         duration: 300,
         useNativeDriver: true,
-      }).start(() => setDetailsPanelVisible(false));
+      }).start(() => {
+        if (mountedRef.current) {
+          setDetailsPanelVisible(false);
+        }
+      });
     } else {
-      // Slide up
       setDetailsPanelVisible(true);
       Animated.timing(detailsAnimation, {
         toValue: 0,
@@ -126,285 +421,338 @@ const Home: React.FC = () => {
         useNativeDriver: true,
       }).start();
     }
-  };
+  }, [detailsPanelVisible, detailsAnimation]);
 
-  // Function to handle like button press
-  const handleLikePress = (): void => {
-    setIsLiked(!isLiked);
-    setLikeCount(isLiked ? likeCount - 1 : likeCount + 1);
-  };
+  // Open in-app browser
+  const openInAppBrowser = useCallback((url: string): void => {
+    if (!url || !mountedRef.current) return;
 
-  // Function to navigate to external actions
-  const handleTaskAction = (task: Task): void => {
-    console.log(`Navigate to: ${task.url} for task: ${task.description}`);
-    // Here you would implement deep linking to the required app/website
-    // For example: Linking.openURL(task.url);
+    setBrowserUrl(url);
+    setBrowserVisible(true);
+  }, []);
 
-    // For the MVP, we'll just simulate task completion
-    const newProgress: UserProgress = { ...userProgress };
-    if (!newProgress[currentIndex]) {
-      newProgress[currentIndex] = { completedTasks: [] };
-    }
+  // Handle like/unlike campaign with toggle mechanism
+  const handleLikePress = useCallback(async (): Promise<void> => {
+    if (!userId || !campaigns[currentIndex]?.id || !mountedRef.current) return;
 
-    if (!newProgress[currentIndex].completedTasks.includes(task.id)) {
-      newProgress[currentIndex].completedTasks.push(task.id);
-      setUserProgress(newProgress);
-    }
+    try {
+      const campaignId = campaigns[currentIndex].id;
+      const currentlyLiked = likedCampaigns[campaignId] || false;
+      const newLikeStatus = !currentlyLiked;
 
-    // Close the task panel
-    toggleTaskPanel();
-  };
+      // Optimistic update (local state only)
+      setLikedCampaigns((prev) => ({
+        ...prev,
+        [campaignId]: newLikeStatus,
+      }));
 
-  // Function to get task completion status
-  const isTaskCompleted = (taskId: number): boolean => {
-    return userProgress[currentIndex]?.completedTasks?.includes(taskId) || false;
-  };
+      // API call
+      const result = await likeCampaign({
+        likerId: userId,
+        campaignId: campaignId,
+      });
 
-  // Function to get campaign completion count
-  const getCompletionCount = (index: number): number => {
-    if (!userProgress[index] || !userProgress[index].completedTasks) {
-      return 0;
-    }
-    return userProgress[index].completedTasks.length;
-  };
-
-  // Handle when a new campaign is in view
-  const handleViewableItemsChanged = React.useCallback(
-    ({ viewableItems }: { viewableItems: any[] }) => {
-      if (viewableItems.length > 0) {
-        const newIndex = viewableItems[0].index;
-        setCurrentIndex(newIndex);
+      // Instead of refetching the entire list, just update the current campaign locally
+      if (result?.data) {
+        // Don't refetch as it changes the order
       }
+    } catch (error) {
+      console.error('Error toggling like status:', error);
+
+      // Revert UI on error
+      if (campaigns[currentIndex]?.id && mountedRef.current) {
+        const campaignId = campaigns[currentIndex].id;
+        setLikedCampaigns((prev) => ({
+          ...prev,
+          [campaignId]: !prev[campaignId],
+        }));
+      }
+    }
+  }, [currentIndex, campaigns, likeCampaign, userId, likedCampaigns]);
+
+  // Handle follow/unfollow business
+  const handleFollowPress = useCallback(async (): Promise<void> => {
+    if (!userId || !campaigns[currentIndex]?.business || !mountedRef.current) return;
+
+    try {
+      const businessId = campaigns[currentIndex].business;
+      const currentStatus = followState[currentIndex] || false;
+      const newStatus = !currentStatus;
+
+      // Optimistic update
+      setFollowState((prev) => ({
+        ...prev,
+        [currentIndex]: newStatus,
+      }));
+
+      // Store follow state
+      const followsData = (await getJSONFromAsyncStorage(BUSINESS_FOLLOWS_KEY)) || {};
+      const businessKey =
+        typeof businessId === 'object' && businessId.id
+          ? businessId.id
+          : typeof businessId === 'object' && businessId.name
+            ? businessId.name
+            : String(businessId);
+
+      followsData[businessKey] = newStatus;
+      await saveJSONToAsyncStorage(BUSINESS_FOLLOWS_KEY, followsData);
+    } catch (error) {
+      console.error('Error following business:', error);
+
+      // Revert UI on error
+      if (mountedRef.current) {
+        setFollowState((prev) => ({
+          ...prev,
+          [currentIndex]: !prev[currentIndex],
+        }));
+      }
+    }
+  }, [currentIndex, campaigns, followState, userId]);
+
+  // Handle trophy icon press
+  const handleTrophyPress = useCallback((): void => {
+    if (hasJoined[currentIndex]) {
+      toggleTaskPanel();
+    } else {
+      toggleDetailsPanel();
+    }
+  }, [currentIndex, hasJoined, toggleTaskPanel, toggleDetailsPanel]);
+
+  // Handle campaign join with toggle mechanism
+  const handleJoinCampaign = useCallback(async (): Promise<void> => {
+    if (!userId || !campaigns[currentIndex]?.id || !mountedRef.current) return;
+
+    try {
+      const campaignId = campaigns[currentIndex].id;
+
+      // Optimistic update
+      setHasJoined((prev) => ({
+        ...prev,
+        [currentIndex]: true,
+      }));
+
+      // Update cache
+      await updateCachedJoinStatus(campaignId, true);
+
+      // API call
+      await joinCampaign({
+        userId: userId,
+        campaignId: campaignId,
+      });
+
+      // UI updates
+      toggleDetailsPanel();
+      toggleTaskPanel();
+    } catch (error) {
+      console.error('Error joining campaign:', error);
+
+      // Revert on failure
+      if (campaigns[currentIndex]?.id && mountedRef.current) {
+        await loadCachedJoinStatus();
+      }
+    }
+  }, [currentIndex, campaigns, joinCampaign, toggleDetailsPanel, toggleTaskPanel, userId]);
+
+  // Handle task completion
+  const handleTaskAction = useCallback(
+    async (task: Task): Promise<void> => {
+      if (!mountedRef.current) return;
+
+      // Update progress
+      const newProgress: UserProgress = { ...userProgress };
+      if (!newProgress[currentIndex]) {
+        newProgress[currentIndex] = { completedTasks: [] };
+      }
+
+      if (!newProgress[currentIndex].completedTasks.includes(task.id)) {
+        newProgress[currentIndex].completedTasks.push(task.id);
+        setUserProgress(newProgress);
+
+        // Persist progress
+        await saveJSONToAsyncStorage(USER_TASK_PROGRESS_KEY, newProgress);
+      }
+
+      const processTaskUrl = (url: string) => {
+        const socialActions = [
+          { keywords: ['create tweet', 'tweet', 'post'], action: 'create' },
+          { keywords: ['follow'], action: 'follow' },
+          { keywords: ['retweet', 'rt'], action: 'retweet' },
+          { keywords: ['comment'], action: 'comment' },
+          { keywords: ['like'], action: 'like' },
+        ];
+
+        // Determine action based on URL text
+        const lowerUrl = url.toLowerCase();
+        const matchedAction = socialActions.find((action) =>
+          action.keywords.some((keyword) => lowerUrl.includes(keyword))
+        );
+
+        // Refine URL
+        const refinedUrl =
+          url.replace(/^(follow:\s*)?/, '').match(/(https?:\/\/[^\s]+)/)?.[0] || url;
+
+        return {
+          action: matchedAction ? matchedAction.action : 'default',
+          url: refinedUrl,
+        };
+      };
+
+      // Open URL if available
+      if (task.url) {
+        const { url } = processTaskUrl(task.url);
+        openInAppBrowser(url);
+      }
+
+      toggleTaskPanel();
     },
-    []
+    [currentIndex, userProgress, toggleTaskPanel, openInAppBrowser]
   );
 
-  // Render each campaign item
-  const renderCampaignItem = ({
-    item,
-    index,
-  }: ListRenderItemInfo<Campaign>): React.ReactElement => {
-    const isCompleted = getCompletionCount(index) === item.tasks.length;
-    const progress = getCompletionCount(index);
-    const totalTasks = item.tasks.length;
+  // Helper functions
+  const getCompletionCount = useCallback(
+    (index: number): number => {
+      if (!userProgress[index] || !userProgress[index].completedTasks) {
+        return 0;
+      }
+      return userProgress[index].completedTasks.length;
+    },
+    [userProgress]
+  );
 
-    // Check if the campaign has a video instead of an image
-    const isVideo = item.mediaType === 'video';
+  // Track campaign views when they become visible
+  const handleViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: any[] }): void => {
+      if (!mountedRef.current || viewableItems.length === 0) return;
 
-    // Check if this video is paused
-    const isPaused = videoPaused[index] === true;
+      // Get array of visible indexes
+      const newVisibleIndexes = viewableItems.map((item) => item.index);
 
-    return (
-      <View style={styles.campaignContainer}>
-        {isVideo ? (
-          // Video background using react-native-video
-          <View style={styles.videoContainer}>
-            <TouchableWithoutFeedback onPress={() => toggleVideoPlayback(index)}>
-              <View style={styles.videoWrapper}>
-                <Video
-                  ref={(ref) => {
-                    videoRefs.current[index] = ref;
-                  }}
-                  source={{ uri: item.videoUrl }}
-                  style={styles.videoBackground}
-                  resizeMode={'cover'}
-                  repeat={true}
-                  paused={isPaused}
-                  muted={false}
-                  onError={(e) => console.log('Video error:', e)}
-                  onLoad={() => console.log(`Video ${index} loaded`)}
-                  rate={1.0}
-                  playInBackground={false}
-                  playWhenInactive={false}
-                />
+      // Update the current index to the first visible item
+      const newIndex = viewableItems[0].index;
 
-                {/* Play/Pause Button Overlay (visible when video is paused or controls are shown) */}
-                {(isPaused || controlsVisible) && (
-                  <View style={styles.playButtonOverlay}>
-                    <TouchableOpacity
-                      style={styles.playButton}
-                      onPress={() => toggleVideoPlayback(index)}>
-                      <Ionicons name={isPaused ? 'play' : 'pause'} size={40} color="white" />
-                    </TouchableOpacity>
-                  </View>
-                )}
+      // Only update states if there's a change
+      if (newIndex !== currentIndex) {
+        setCurrentIndex(newIndex);
+      }
 
-                <LinearGradient
-                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
-                  style={styles.overlay}
-                />
+      // Update visible indexes only if they've changed
+      const hasChanged =
+        newVisibleIndexes.length !== visibleIndexes.length ||
+        newVisibleIndexes.some((idx, i) => visibleIndexes[i] !== idx);
 
-                {/* Campaign content */}
-                <SafeAreaView style={styles.contentContainer}>
-                  {/* Top section - Business info and search/filter - Spotify style */}
-                  <View style={styles.headerContainer}>
-                    <TouchableOpacity
-                      style={styles.spotifyLogoContainer}
-                      onPress={toggleDetailsPanel}>
-                      <Text style={styles.spotifyText}>{item.businessName}</Text>
-                      <Ionicons name="information-circle" size={18} color="white" />
-                    </TouchableOpacity>
+      if (hasChanged) {
+        // Don't automatically pause videos that user has manually started
+        const newPausedState = { ...videoPaused };
+        newVisibleIndexes.forEach((visibleIndex) => {
+          // Only auto-play the current main video (index === newIndex)
+          if (visibleIndex === newIndex) {
+            // Don't override manual pause state
+            if (typeof newPausedState[visibleIndex] === 'undefined') {
+              newPausedState[visibleIndex] = false;
+            }
+          }
+        });
 
-                    <View style={styles.searchFilterContainer}>
-                      <TouchableOpacity style={styles.searchButton}>
-                        <Ionicons name="search" size={22} color="white" />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.menuButton}>
-                        <Ionicons name="menu" size={22} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+        // Set visible indexes for other operations
+        setVisibleIndexes(newVisibleIndexes);
 
-                  {/* Bottom section - Campaign details */}
-                  <View style={styles.bottomSection}>
-                    <Text style={styles.campaignName}>{item.campaignName}</Text>
+        // Update pause state with our modifications
+        setVideoPaused(newPausedState);
+      }
+    },
+    [currentIndex, visibleIndexes, videoPaused]
+  );
 
-                    <TouchableOpacity
-                      activeOpacity={0.9}
-                      onPress={() => setExpandedDescription(!expandedDescription)}
-                      style={styles.descriptionContainer}>
-                      <Text
-                        style={styles.campaignDescription}
-                        numberOfLines={expandedDescription ? undefined : 2}>
-                        {item.description}
-                        {!expandedDescription && item.description.length > 90 && (
-                          <Text style={styles.moreText}> ... more</Text>
-                        )}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+  // Memoize campaign item rendering for performance
+  const renderCampaignItem = useCallback(
+    ({ item, index }: { item: any; index: number }) => {
+      // Calculate task metrics
+      const totalTasks = item.tasks
+        ? typeof item.tasks === 'object'
+          ? Object.keys(item.tasks).length
+          : Array.isArray(item.tasks)
+            ? item.tasks.length
+            : 0
+        : 0;
+      const progress = getCompletionCount(index);
+      const isCompleted = progress === totalTasks && totalTasks > 0;
 
-                  {/* Side actions */}
-                  <View style={styles.sideActionsContainer}>
-                    <TouchableOpacity style={styles.sideActionButton} onPress={toggleTaskPanel}>
-                      <View style={styles.trophyContainer}>
-                        <Ionicons
-                          name={isCompleted ? 'trophy' : 'trophy-outline'}
-                          size={28}
-                          color={isCompleted ? '#A71919' : 'white'}
-                        />
-                        <View style={styles.progressCircle}>
-                          {[...Array(totalTasks)].map((_, i) => (
-                            <View
-                              key={i}
-                              style={[
-                                styles.progressDot,
-                                i < progress ? styles.progressDotCompleted : {},
-                              ]}
-                            />
-                          ))}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
+      // Get number of likers - handle nested arrays and normalize format
+      let likersCount = 0;
+      if (item.likers) {
+        // Handle nested arrays in likers
+        const likersArray = Array.isArray(item.likers)
+          ? Array.isArray(item.likers[0])
+            ? item.likers.flat() // Handle nested array
+            : item.likers // Already flat array
+          : [];
 
-                    <TouchableOpacity style={styles.sideActionButton} onPress={handleLikePress}>
-                      <Ionicons
-                        name={isLiked ? 'heart' : 'heart-outline'}
-                        size={28}
-                        color={isLiked ? '#A71919' : 'white'}
-                      />
-                      <Text style={styles.sideActionText}>{likeCount}</Text>
-                    </TouchableOpacity>
+        // Count unique users by normalizing the format
+        const uniqueLikers = new Set();
+        likersArray.forEach((liker: any) => {
+          if (!liker) return;
+          // Remove quotes if present
+          const cleanLiker =
+            typeof liker === 'string'
+              ? liker.replace(/^"(.*)"$/, '$1').replace(/\\/g, '')
+              : String(liker);
+          uniqueLikers.add(cleanLiker);
+        });
+        likersCount = uniqueLikers.size;
+      }
 
-                    <TouchableOpacity style={styles.sideActionButton}>
-                      <Ionicons name="share-social-outline" size={28} color="white" />
-                      <Text style={styles.sideActionText}>Share</Text>
-                    </TouchableOpacity>
-                  </View>
-                </SafeAreaView>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        ) : (
-          // Image background
-          <ImageBackground source={{ uri: item.imageUrl }} style={styles.campaignBackground}>
-            {/* Semi-transparent overlay for better text readability */}
-            <LinearGradient
-              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
-              style={styles.overlay}
-            />
+      // Check if this specific campaign is liked by the user
+      const isLikedByCurrent = item.id ? likedCampaigns[item.id] || false : false;
 
-            {/* Campaign content */}
-            <SafeAreaView style={styles.contentContainer}>
-              {/* Top section - Business info and search/filter - Spotify style */}
-              <View style={styles.headerContainer}>
-                <TouchableOpacity style={styles.spotifyLogoContainer} onPress={toggleDetailsPanel}>
-                  <Text style={styles.spotifyText}>{item.businessName}</Text>
-                  <Ionicons name="information-circle" size={18} color="white" />
-                </TouchableOpacity>
+      // Video should be paused when not in view
+      const isPaused = videoPaused[index] !== false;
 
-                <View style={styles.searchFilterContainer}>
-                  <TouchableOpacity style={styles.searchButton}>
-                    <Ionicons name="search" size={22} color="white" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.menuButton}>
-                    <Ionicons name="menu" size={22} color="white" />
-                  </TouchableOpacity>
-                </View>
-              </View>
+      return (
+        <CampaignItem
+          item={item}
+          index={index}
+          currentIndex={currentIndex}
+          isLastItem={index === campaigns.length - 1}
+          videoRefs={videoRefs}
+          videoPaused={isPaused}
+          expandedDescription={expandedDescription && currentIndex === index}
+          isLiked={isLikedByCurrent}
+          likeCount={likersCount}
+          followState={followState}
+          hasJoined={hasJoined}
+          progress={progress}
+          totalTasks={totalTasks}
+          isCompleted={isCompleted}
+          onToggleVideo={toggleVideoPlayback}
+          onToggleDescription={() => setExpandedDescription(!expandedDescription)}
+          onDetailsPress={toggleDetailsPanel}
+          onTrophyPress={handleTrophyPress}
+          onLikePress={handleLikePress}
+          onFollowPress={handleFollowPress}
+          onWebsitePress={() => openInAppBrowser(item.cta?.url)}
+        />
+      );
+    },
+    [
+      currentIndex,
+      expandedDescription,
+      followState,
+      hasJoined,
+      likedCampaigns,
+      videoPaused,
+      getCompletionCount,
+      handleLikePress,
+      handleFollowPress,
+      handleTrophyPress,
+      toggleDetailsPanel,
+      toggleVideoPlayback,
+      openInAppBrowser,
+      campaigns,
+    ]
+  );
 
-              {/* Bottom section - Campaign details */}
-              <View style={styles.bottomSection}>
-                <Text style={styles.campaignName}>{item.campaignName}</Text>
-
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => setExpandedDescription(!expandedDescription)}
-                  style={styles.descriptionContainer}>
-                  <Text
-                    style={styles.campaignDescription}
-                    numberOfLines={expandedDescription ? undefined : 2}>
-                    {item.description}
-                    {!expandedDescription && item.description.length > 90 && (
-                      <Text style={styles.moreText}> ... more</Text>
-                    )}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Side actions */}
-              <View style={styles.sideActionsContainer}>
-                <TouchableOpacity style={styles.sideActionButton} onPress={toggleTaskPanel}>
-                  <View style={styles.trophyContainer}>
-                    <Ionicons
-                      name={isCompleted ? 'trophy' : 'trophy-outline'}
-                      size={28}
-                      color={isCompleted ? '#A71919' : 'white'}
-                    />
-                    <View style={styles.progressCircle}>
-                      {[...Array(totalTasks)].map((_, i) => (
-                        <View
-                          key={i}
-                          style={[
-                            styles.progressDot,
-                            i < progress ? styles.progressDotCompleted : {},
-                          ]}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.sideActionButton} onPress={handleLikePress}>
-                  <Ionicons
-                    name={isLiked ? 'heart' : 'heart-outline'}
-                    size={28}
-                    color={isLiked ? '#A71919' : 'white'}
-                  />
-                  <Text style={styles.sideActionText}>{likeCount}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.sideActionButton}>
-                  <Ionicons name="share-social-outline" size={28} color="white" />
-                  <Text style={styles.sideActionText}>Share</Text>
-                </TouchableOpacity>
-              </View>
-            </SafeAreaView>
-          </ImageBackground>
-        )}
-      </View>
-    );
-  };
+  // Key extractor optimization
+  const keyExtractor = useCallback((item: any) => item.id.toString(), []);
 
   return (
     <>
@@ -413,170 +761,92 @@ const Home: React.FC = () => {
 
       {/* Main campaign feed */}
       <View style={styles.container}>
-        <FlatList
-          data={campaignData}
-          renderItem={renderCampaignItem}
-          keyExtractor={(item) => item.id.toString()}
-          pagingEnabled
-          snapToInterval={height}
-          decelerationRate="fast"
-          showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={handleViewableItemsChanged}
-          viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
-          onMomentumScrollEnd={(event) => {
-            const newIndex = Math.round(event.nativeEvent.contentOffset.y / height);
-            setCurrentIndex(newIndex);
-          }}
-        />
+        {isLoading && !refreshing && campaigns.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#B71C1C" />
+            <Text style={styles.loadingText}>Loading campaigns...</Text>
+          </View>
+        ) : campaigns.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>No campaigns available</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={campaigns}
+            renderItem={renderCampaignItem}
+            keyExtractor={keyExtractor}
+            pagingEnabled={true}
+            snapToInterval={height}
+            snapToAlignment={'start'}
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            onViewableItemsChanged={handleViewableItemsChanged}
+            viewabilityConfig={VIEWABILITY_CONFIG}
+            disableIntervalMomentum={true}
+            onMomentumScrollEnd={(event) => {
+              const newIndex = Math.round(event.nativeEvent.contentOffset.y / height);
+              if (newIndex !== currentIndex && mountedRef.current) {
+                setCurrentIndex(newIndex);
+              }
+            }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#ffffff"
+                colors={['#B71C1C']}
+                progressBackgroundColor="#000000"
+                title="Pull to refresh"
+                titleColor="#ffffff"
+              />
+            }
+            initialNumToRender={2}
+            maxToRenderPerBatch={3}
+            windowSize={5}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+            }}
+            removeClippedSubviews={true} // Improve memory usage
+          />
+        )}
+
+        {/* Show loading indicator while refreshing */}
+        {refreshing && (
+          <View style={styles.refreshingIndicator}>
+            <ActivityIndicator color="#B71C1C" />
+          </View>
+        )}
       </View>
 
-      {/* Tasks Panel Modal */}
-      {taskPanelVisible && (
-        <Modal
-          transparent={true}
-          visible={taskPanelVisible}
-          animationType="none"
-          onRequestClose={toggleTaskPanel}>
-          <Animated.View
-            style={[styles.taskPanelContainer, { transform: [{ translateY: slideAnimation }] }]}>
-            <View style={styles.taskPanelContent}>
-              <View style={styles.taskPanelHeader}>
-                <Text style={styles.taskPanelTitle}>Campaign Tasks</Text>
-                <TouchableOpacity onPress={toggleTaskPanel}>
-                  <Ionicons name="close-circle" size={28} color="#666" />
-                </TouchableOpacity>
-              </View>
+      {/* Tasks Modal */}
+      <TasksModal
+        visible={taskPanelVisible}
+        campaign={campaigns[currentIndex]}
+        animation={slideAnimation}
+        onClose={toggleTaskPanel}
+        onTaskAction={handleTaskAction}
+        currentIndex={currentIndex}
+        userProgress={userProgress}
+      />
 
-              <View style={styles.tasksList}>
-                {campaignData[currentIndex]?.tasks.map((task) => (
-                  <TouchableOpacity
-                    key={task.id}
-                    style={[
-                      styles.taskItem,
-                      isTaskCompleted(task.id) ? styles.taskItemCompleted : {},
-                    ]}
-                    onPress={() => handleTaskAction(task)}
-                    disabled={isTaskCompleted(task.id)}>
-                    <View style={styles.taskIconWrapper}>
-                      {isTaskCompleted(task.id) ? (
-                        <Ionicons name="checkmark-circle" size={24} color="#00C853" />
-                      ) : (
-                        <View style={styles.taskIcon}>
-                          <Text style={styles.taskIconText}>{task.id}</Text>
-                        </View>
-                      )}
-                    </View>
+      {/* Campaign Details Modal */}
+      <CampaignDetailsModal
+        visible={detailsPanelVisible}
+        campaign={campaigns[currentIndex]}
+        animation={detailsAnimation}
+        hasJoined={hasJoined[currentIndex] || false}
+        currentIndex={currentIndex}
+        onClose={toggleDetailsPanel}
+        onJoin={handleJoinCampaign}
+      />
 
-                    <View style={styles.taskInfo}>
-                      <Text style={styles.taskTitle}>{task.description}</Text>
-                      <Text style={styles.taskPoints}>+{task.points} points</Text>
-                    </View>
-
-                    <Ionicons
-                      name={isTaskCompleted(task.id) ? 'checkmark' : 'arrow-forward'}
-                      size={24}
-                      color={isTaskCompleted(task.id) ? '#00C853' : '#B71C1C'}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={styles.totalPoints}>
-                <Text style={styles.totalPointsText}>
-                  Total: {campaignData[currentIndex]?.points} points
-                </Text>
-              </View>
-            </View>
-          </Animated.View>
-        </Modal>
-      )}
-
-      {/* Details Panel Modal */}
-      {detailsPanelVisible && (
-        <Modal
-          transparent={true}
-          visible={detailsPanelVisible}
-          animationType="none"
-          onRequestClose={toggleDetailsPanel}>
-          <Animated.View
-            style={[
-              styles.detailsPanelContainer,
-              { transform: [{ translateY: detailsAnimation }] },
-            ]}>
-            <View style={styles.detailsPanelContent}>
-              <View style={styles.detailsPanelHeader}>
-                <Text style={styles.detailsPanelTitle}>Campaign Details</Text>
-                <TouchableOpacity onPress={toggleDetailsPanel}>
-                  <Ionicons name="close-circle" size={28} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.detailsContent}>
-                <Text style={styles.detailsCampaignName}>
-                  {campaignData[currentIndex]?.campaignName}
-                </Text>
-                <Text style={styles.detailsBusinessName}>
-                  by {campaignData[currentIndex]?.businessName}
-                </Text>
-
-                <View style={styles.detailsInfoRow}>
-                  <View style={styles.detailsInfoItem}>
-                    <Ionicons name="calendar" size={20} color="#666" />
-                    <Text style={styles.detailsInfoText}>
-                      Ends: {campaignData[currentIndex]?.endDate}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailsInfoItem}>
-                    <Ionicons name="people" size={20} color="#666" />
-                    <Text style={styles.detailsInfoText}>
-                      {campaignData[currentIndex]?.totalParticipants} participants
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailsInfoRow}>
-                  <View style={styles.detailsInfoItem}>
-                    <Ionicons name="trophy" size={20} color="#666" />
-                    <Text style={styles.detailsInfoText}>
-                      {campaignData[currentIndex]?.points} points
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailsInfoItem}>
-                    <Ionicons name="pricetag" size={20} color="#666" />
-                    <Text style={styles.detailsInfoText}>
-                      {campaignData[currentIndex]?.category}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={styles.detailsDescription}>
-                  {campaignData[currentIndex]?.description}
-                </Text>
-
-                <View style={styles.detailsTasksPreview}>
-                  <Text style={styles.detailsTasksTitle}>Tasks:</Text>
-                  {campaignData[currentIndex]?.tasks.map((task) => (
-                    <View key={task.id} style={styles.detailsTaskItem}>
-                      <Text style={styles.detailsTaskText}>• {task.description}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.startCampaignButton}
-                  onPress={() => {
-                    toggleDetailsPanel();
-                    toggleTaskPanel();
-                  }}>
-                  <Text style={styles.startCampaignText}>Start Campaign</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
-        </Modal>
-      )}
+      {/* In-App Browser */}
+      <InAppBrowser
+        url={browserUrl}
+        visible={browserVisible}
+        onClose={() => setBrowserVisible(false)}
+      />
     </>
   );
 };
@@ -584,430 +854,28 @@ const Home: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  campaignContainer: {
-    width: width,
-    height: height,
-  },
-  campaignBackground: {
-    flex: 1,
-    resizeMode: 'cover',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 1, // Keep overlay above video but below controls
-  },
-  contentContainer: {
-    flex: 1,
-    justifyContent: 'space-between',
-    padding: 16,
-    zIndex: 2, // Keep content above overlay
-  },
-
-  videoContainer: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  videoWrapper: {
-    flex: 1,
-    position: 'relative',
-  },
-  videoBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    right: 0,
-    width: width,
-    height: height,
     backgroundColor: '#000',
   },
-  // Play button overlay
-  playButtonOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 3, // Above overlay but below content
-  },
-  playButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  spotifyLogoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 30,
-  },
-  spotifyText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginRight: 6,
-  },
-  searchFilterContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 30,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  searchButton: {
-    marginRight: 15,
-  },
-  menuButton: {},
-
-  bottomSection: {
-    marginBottom: 50,
-    width: '80%',
-  },
-  campaignName: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  descriptionContainer: {
-    marginBottom: 12,
-  },
-  campaignDescription: {
-    color: 'white',
-    fontSize: 16,
-    lineHeight: 22,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 0.5, height: 0.5 },
-    textShadowRadius: 2,
-  },
-  moreText: {
-    color: '#e0e0e0',
-    fontWeight: '500',
-    fontSize: 15,
-  },
-  // Spotify-style side action buttons
-  sideActionsContainer: {
-    position: 'absolute',
-    right: 16,
-    top: '57%',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    padding: 4,
-    borderRadius: 12,
-    alignItems: 'center',
-    zIndex: 4, // Keep above all other elements
-  },
-  sideActionButton: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  spotifyActionButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  sideActionText: {
-    color: 'white',
-    fontSize: 12,
-  },
-  likeCountText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-
-  taskButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 25,
-    alignSelf: 'flex-start',
-  },
-  taskButtonCompleted: {
-    backgroundColor: 'rgba(0, 200, 83, 0.3)',
-  },
-  taskIconContainer: {
-    marginRight: 8,
-  },
-  taskButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  trophyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    width: 52,
-    height: 52,
-  },
-  progressCircle: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingBottom: 4,
-  },
-  progressDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    marginHorizontal: 2,
-  },
-  progressDotCompleted: {
-    backgroundColor: '#A71919',
-  },
-  filterOverlay: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 24,
-    width: 100,
-    padding: 4,
-    position: 'absolute',
-    top: 68,
-    right: 24,
-    zIndex: 10,
-  },
-  sliderContainer: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  sliderItem: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-  },
-  sliderTrack: {
-    height: 3,
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 1.5,
-    position: 'relative',
-  },
-  sliderFill: {
-    position: 'absolute',
-    height: '100%',
-    width: '50%',
-    backgroundColor: 'white',
-    borderRadius: 1.5,
-  },
-  sliderKnob: {
-    position: 'absolute',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: 'white',
-    top: -5.5,
-    left: '50%',
-    marginLeft: -7,
-  },
-  statusBadge: {
-    position: 'absolute',
-    top: 100,
-    right: 16,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  taskPanelContainer: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  taskPanelContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    maxHeight: height * 0.7,
-  },
-  taskPanelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  taskPanelTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  tasksList: {
-    marginVertical: 16,
-  },
-  taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    marginBottom: 12,
-    borderRadius: 12,
-    padding: 16,
-  },
-  taskItemCompleted: {
-    backgroundColor: '#E8F5E9',
-  },
-  taskIconWrapper: {
-    marginRight: 16,
-  },
-  taskIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#B71C1C',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
   },
-  taskIconText: {
+  loadingText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  taskInfo: {
-    flex: 1,
-  },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  taskPoints: {
-    fontSize: 14,
-    color: '#B71C1C',
-    fontWeight: 'bold',
-  },
-  totalPoints: {
-    alignItems: 'center',
-    marginTop: 8,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
-  },
-  totalPointsText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#B71C1C',
-  },
-  detailsPanelContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  detailsPanelContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    maxHeight: height * 0.8,
-  },
-  detailsPanelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  detailsPanelTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  detailsContent: {
-    paddingVertical: 16,
-  },
-  detailsCampaignName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  detailsBusinessName: {
-    fontSize: 16,
-    color: '#666666',
-    marginBottom: 16,
-  },
-  detailsInfoRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  detailsInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 20,
-  },
-  detailsInfoText: {
-    fontSize: 14,
-    color: '#666666',
-    marginLeft: 8,
-  },
-  detailsDescription: {
-    fontSize: 16,
-    color: '#333333',
-    lineHeight: 24,
-    marginVertical: 16,
-  },
-  detailsTasksPreview: {
-    marginVertical: 16,
-  },
-  detailsTasksTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333333',
-    marginBottom: 8,
-  },
-  detailsTaskItem: {
-    marginBottom: 8,
-  },
-  detailsTaskText: {
-    fontSize: 16,
-    color: '#333333',
-  },
-  startCampaignButton: {
-    backgroundColor: '#B71C1C',
-    paddingVertical: 16,
-    borderRadius: 30,
-    alignItems: 'center',
     marginTop: 16,
+    fontWeight: '400',
   },
-  startCampaignText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+  refreshingIndicator: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
 });
 

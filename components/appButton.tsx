@@ -13,7 +13,7 @@ export default function AppButton({ title, color, link, handleClick, image }: IB
         color === 'Dark' ? { backgroundColor: '#B71C1C' } : { backgroundColor: '#EDEDED' },
       ]}
       onPress={() =>
-        link ? router.push({ pathname: link ? link : '/' }) : handleClick ? handleClick() : ''
+        link ? router.push({ pathname: link ? link : '/' as any }) : handleClick ? handleClick() : ''
       }>
       {image && (
         <Image

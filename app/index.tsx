@@ -1,54 +1,102 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, Stack } from 'expo-router';
 import AppButton from '~/components/appButton';
-import { PanGestureHandler } from 'react-native-gesture-handler';
-import { View, SafeAreaView, ImageBackground, Dimensions } from 'react-native';
+import { View, SafeAreaView, ImageBackground, Dimensions, FlatList } from 'react-native';
 import { StyleSheet } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage';
 import { Text, ActivityIndicator, Image } from 'react-native';
 
+// Move static data outside component
+const onboardData = [
+  {
+    image: require('../assets/onboard.png'),
+    desc: 'Watch Ads, Earn Rewards, Pay Less',
+    isSelected: true,
+  },
+  {
+    image: require('../assets/onboard.png'),
+    desc: 'Happy Business, Happy User',
+    isSelected: false,
+  },
+  {
+    image: require('../assets/onboard.png'),
+    desc: 'contribute, interact, and earn Poynts',
+    isSelected: false,
+  },
+];
+
+const { width } = Dimensions.get('window');
+
 export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   const router = useRouter();
-  const translateX = useSharedValue(0);
-  const screenWidth = Dimensions.get('window').width;
-
-  // console.log('🔍 Rendering index.tsx (Onboarding screen)');
-
-  useEffect(() => {
-    checkUserStatus();
-    return () => {};
+  const flatListRef: any = useCallback((node: any) => {
+    if (node !== null) {
+    }
   }, []);
 
-  async function checkUserStatus() {
-    setIsLoading(true);
+  // 3. Handler functions using useCallback
+  const handleLoginFlag = useCallback(async () => {
     try {
-      const userHasOpenedApp = await getDataFromAsyncStorage('userHasOpenedApp');
+      await saveDataToAsyncStorage('userHasOnboarded', "true");
+      router.push('/screens/login' as any);
+    } catch (error) {
+      console.error('Error saving onboarding status:', error);
+      router.push('/screens/login' as any);
+    }
+  }, [router]);
 
+  const checkUserStatus = useCallback(async () => {
+    try {
+      const userHasOnboarded = await getDataFromAsyncStorage('userHasOnboarded');
       const refreshToken = await getDataFromAsyncStorage('refreshToken');
 
       if (refreshToken) {
-        // User is logged in, redirect to home
         router.replace('/screens/home');
-      } else if (userHasOpenedApp) {
-        // User has seen onboarding but not logged in, redirect to login
-        router.replace('/screens/login');
+      } else if (userHasOnboarded === ("true")) {
+        router.replace('/screens/login' as any);
       } else {
-        // New user, show onboarding
         setShowOnboarding(true);
-        await saveDataToAsyncStorage('userHasOpenedApp', true);
-        setIsLoading(false);
       }
     } catch (error) {
       console.error('🔍 Error in checkUserStatus:', error);
+      setShowOnboarding(true);
+    } finally {
       setIsLoading(false);
     }
-  }
+  }, [router]);
 
-  // Render splash screen while loading
+  useEffect(() => {
+    checkUserStatus();
+  }, [checkUserStatus]);
+
+  const renderOnboardingScreen = useCallback(({ item, index }: any) => {
+    return (
+      <View style={styles.slideContainer}>
+        <ImageBackground source={item.image} style={styles.backgroundImage} resizeMode="cover">
+          <View style={styles.bottomContentContainer}>
+            <Text style={styles.introText}>{item.desc}</Text>
+          </View>
+        </ImageBackground>
+      </View>
+    );
+  }, []);
+
+  const handleScroll = useCallback(
+    (event: any) => {
+      const scrollPosition = event.nativeEvent.contentOffset.x;
+      const index = Math.round(scrollPosition / width);
+      if (index !== currentIndex) {
+        setCurrentIndex(index);
+      }
+    },
+    [currentIndex]
+  );
+
+  // Render - use conditional rendering AFTER all hooks are defined
   if (isLoading) {
     return (
       <View style={styles.splashContainer}>
@@ -61,76 +109,56 @@ export default function Home() {
     );
   }
 
-  const onboardData = [
-    {
-      desc: 'Watch Ads, Earn Rewards, Pay Less',
-      isSelected: true,
-    },
-    {
-      desc: 'Happy Business, Happy User',
-      isSelected: false,
-    },
-    {
-      desc: 'contribute, interact, and earn points',
-      isSelected: false,
-    },
-  ];
+  if (!showOnboarding) {
+    return (
+      <View style={styles.splashContainer}>
+        <ActivityIndicator size="large" color="#B71C1C" />
+      </View>
+    );
+  }
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
-    };
-  });
-
-  const handleGesture = (event: any) => {
-    const { translationX } = event.nativeEvent;
-    translateX.value = translationX;
-  };
-
-  const handleGestureEnd = (event: any) => {
-    const { translationX } = event.nativeEvent;
-
-    translateX.value = withSpring(0); // Reset position with spring animation
-
-    if (translationX < -50 && currentIndex < onboardData.length - 1) {
-      // Swipe left
-      setCurrentIndex(currentIndex + 1);
-    } else if (translationX > 50 && currentIndex > 0) {
-      // Swipe right
-      setCurrentIndex(currentIndex - 1);
-    }
-  };
-
-  const dotItems = onboardData.map((item, index) => (
-    <View
-      key={index}
-      style={[styles.circle, index === currentIndex ? styles.filled : styles.empty]}
-    />
-  ));
-
+  // Main render for onboarding screen
   return (
     <>
       <Stack.Screen options={{ title: 'Onboard', headerShown: false }} />
-      <ImageBackground
-        source={require('../assets/onboard.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover">
-        <SafeAreaView style={styles.container}>
-          <PanGestureHandler onGestureEvent={handleGesture} onEnded={handleGestureEnd}>
-            <Animated.View style={[styles.contentContainer, animatedStyle]}>
-              <View style={styles.bottomContentContainer}>
-                <Text style={styles.introText}>{onboardData[currentIndex].desc}</Text>
+      <SafeAreaView style={styles.container}>
+        <FlatList
+          ref={flatListRef}
+          data={onboardData}
+          renderItem={renderOnboardingScreen}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={handleScroll}
+          initialScrollIndex={0}
+          keyExtractor={(_, index) => index.toString()}
+          getItemLayout={(_, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
+        />
 
-                <View style={styles.circleContainer}>{dotItems}</View>
+        <View style={styles.controlsContainer}>
+          {/* Pagination dots */}
+          <View style={styles.paginationContainer}>
+            {onboardData.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.paginationDot,
+                  index === currentIndex ? styles.paginationDotActive : {},
+                ]}
+              />
+            ))}
+          </View>
 
-                <View style={styles.buttonContainers}>
-                  <AppButton title={'Login'} color={'Dark'} link={'/screens/login'} />
-                </View>
-              </View>
-            </Animated.View>
-          </PanGestureHandler>
-        </SafeAreaView>
-      </ImageBackground>
+          {/* Buttons */}
+          <View style={styles.buttonContainers}>
+            <AppButton title="Join Now" color="Dark" handleClick={handleLoginFlag} />
+          </View>
+        </View>
+      </SafeAreaView>
     </>
   );
 }
@@ -138,9 +166,7 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 24,
+    backgroundColor: '#FDF6E6',
   },
   splashContainer: {
     flex: 1,
@@ -152,41 +178,21 @@ const styles = StyleSheet.create({
     width: '90%',
     height: '90%',
   },
-
+  slideContainer: {
+    width: width,
+    height: '100%',
+  },
   backgroundImage: {
     flex: 1,
-    width: '40%',
-    height: '40%',
-  },
-  contentContainer: {
     width: '100%',
-    alignItems: 'center',
+    height: '100%',
     justifyContent: 'flex-end',
-    flex: 1,
   },
   bottomContentContainer: {
     width: '100%',
+    height: '33%',
     alignItems: 'center',
-    marginBottom: 56,
-  },
-  circleContainer: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 28,
-  },
-  circle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  filled: {
-    backgroundColor: '#B71C1C',
-  },
-  empty: {
-    backgroundColor: '#D9D9D9',
+    paddingHorizontal: 24,
   },
   introText: {
     fontFamily: 'Inter-VariableFont',
@@ -196,14 +202,42 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     color: '#FDF6E6',
     fontWeight: '600',
-    // textAlign: 'center',
-    paddingTop: 29,
-    borderRadius: 10,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  controlsContainer: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 32,
+  },
+  paginationDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#D9D9D9',
+    marginHorizontal: 5,
+  },
+  paginationDotActive: {
+    backgroundColor: '#B71C1C',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
   },
   buttonContainers: {
     width: '100%',
-    marginTop: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
