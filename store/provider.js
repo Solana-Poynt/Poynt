@@ -1,6 +1,18 @@
-import { store } from "./store";
-import { Provider } from "react-redux";
+// store/provider.js
+import React from 'react';
+import { Provider } from 'react-redux';
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from './store';
+import TopLoadingModal from '../components/Loader';
 
-export const StoreProvider = ({ children }) => {
-  return <Provider store={store}>{children}</Provider>;
-};
+function StoreProvider({ children }) {
+  return (
+    <Provider store={store}>
+      <PersistGate loading={<TopLoadingModal message="Loading data..." />} persistor={persistor}>
+        {children}
+      </PersistGate>
+    </Provider>
+  );
+}
+
+export default StoreProvider;

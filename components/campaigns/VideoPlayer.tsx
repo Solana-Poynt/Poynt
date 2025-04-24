@@ -1,7 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableWithoutFeedback, TouchableOpacity, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import Video from 'react-native-video';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Dimensions } from 'react-native';
 
 const { height, width } = Dimensions.get('window');
@@ -11,96 +10,93 @@ interface VideoPlayerProps {
   paused: boolean;
   index: number;
   onRef: (ref: any, index: number) => void;
-  onTogglePlayback: (index: number) => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({
-  uri,
-  paused,
-  index,
-  onRef,
-  onTogglePlayback,
-}) => {
-  const [controlsVisible, setControlsVisible] = useState(false);
-  const [videoAspect, setVideoAspect] = useState(16 / 9);
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ uri, paused, index, onRef }) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const videoRef = useRef<any>(null);
 
+  // Use effect to properly manage video state based on visibility
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (controlsVisible && !paused) {
-      timer = setTimeout(() => {
-        setControlsVisible(false);
-      }, 2000);
+    if (videoRef.current) {
+      if (paused) {
+        // Ensure video is definitely paused when not visible
+        videoRef.current.seek(0);
+      }
     }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [controlsVisible, paused]);
+  }, [paused]);
 
-  const handlePress = () => {
-    setControlsVisible(true);
-    onTogglePlayback(index);
+  const handleError = (error: any) => {
+    const errorMessage = error.error?.message || 'Unknown error';
+    setIsLoading(false);
+    setError(errorMessage);
+  };
+
+  const handleLoad = (meta: any) => {
+    setIsLoading(false);
+    setError(null);
+  };
+
+  const handleBuffer = (meta: { isBuffering: boolean }) => {
+    setIsLoading(meta.isBuffering);
   };
 
   return (
     <View style={styles.videoContainer}>
-      <TouchableWithoutFeedback onPress={handlePress}>
-        <View style={styles.videoWrapper}>
-          {uri ? (
-            <Video
-              ref={(ref) => onRef(ref, index)}
-              source={{ uri }}
-              style={styles.videoBackground}
-              resizeMode={'contain'}
-              playWhenInactive={false}
-              repeat={true}
-              paused={paused}
-              muted={false}
-              onError={() => {}}
-              onLoad={(data) => {
-                if (data.naturalSize) {
-                  const { width, height } = data.naturalSize;
-                  setVideoAspect(width / height);
-                }
-              }}
-              rate={1.0}
-              volume={1.0}
-              ignoreSilentSwitch="ignore"
-              playInBackground={false}
-            />
-          ) : (
-            <View style={[styles.videoBackground, { backgroundColor: '#111' }]}>
-              <Text style={styles.loadingText}>Media not available</Text>
+      {uri ? (
+        <>
+          <Video
+            ref={(ref) => {
+              videoRef.current = ref;
+              onRef(ref, index);
+            }}
+            source={{ uri }}
+            style={styles.videoBackground}
+            resizeMode="contain"
+            repeat={true}
+            paused={paused} // This controls playback based on visibility
+            muted={false}
+            onError={handleError}
+            onLoad={handleLoad}
+            onBuffer={handleBuffer}
+            rate={1.0}
+            volume={1.0}
+            ignoreSilentSwitch="ignore"
+            playInBackground={false}
+            playWhenInactive={false}
+          />
+          {isLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#FFF" />
+              <Text style={styles.loadingText}>Loading video...</Text>
             </View>
           )}
-
-          {(paused || controlsVisible) && (
-            <View style={styles.playButtonOverlay}>
-              <TouchableOpacity style={styles.playButton} onPress={() => onTogglePlayback(index)}>
-                <Ionicons name={paused ? 'play' : 'pause'} size={40} color="white" />
-              </TouchableOpacity>
+          {error && (
+            <View style={styles.errorOverlay}>
+              <Text style={styles.errorText}>Failed to load video: {error}</Text>
             </View>
           )}
+        </>
+      ) : (
+        <View style={[styles.videoBackground, styles.errorContainer]}>
+          <Text style={styles.errorText}>Invalid video URL</Text>
         </View>
-      </TouchableWithoutFeedback>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   videoContainer: {
-    flex: 1,
     backgroundColor: '#000',
-    height: height,
-    width: width,
-  },
-  videoWrapper: {
-    flex: 1,
-    backgroundColor: '#000',
-    overflow: 'hidden',
+    height,
+    width,
+    zIndex: 0,
   },
   videoBackground: {
     position: 'absolute',
-    top: 12,
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
@@ -108,26 +104,35 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#000',
   },
-  playButtonOverlay: {
+  loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  playButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '400',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 16,
+    fontWeight: '400',
+    textAlign: 'center',
+    padding: 16,
   },
 });
 

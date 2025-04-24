@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,11 +22,26 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, visible, onClose }) =>
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [title, setTitle] = useState('');
+  const [webViewUrl, setWebViewUrl] = useState('');
 
-  if (!url) return null;
+  // Set the URL when visible changes or URL changes
+  useEffect(() => {
+    if (visible && url) {
+      setWebViewUrl(url);
+      console.log('Opening browser with URL:', url);
+    }
+  }, [visible, url]);
+
+  // Don't render anything if no URL or not visible
+  if (!visible) return null;
 
   return (
-    <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
+    <Modal
+      animationType="slide"
+      transparent={false}
+      visible={visible}
+      onRequestClose={onClose}
+      presentationStyle="fullScreen">
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.header}>
@@ -55,18 +70,29 @@ const InAppBrowser: React.FC<InAppBrowserProps> = ({ url, visible, onClose }) =>
           <ActivityIndicator style={styles.loadingIndicator} size="large" color="#B71C1C" />
         )}
 
-        <WebView
-          source={{ uri: url }}
-          style={styles.webview}
-          onLoadStart={() => setLoading(true)}
-          onLoadEnd={() => setLoading(false)}
-          onLoadProgress={({ nativeEvent }) => {
-            setProgress(nativeEvent.progress);
-          }}
-          onNavigationStateChange={(navState) => {
-            setTitle(navState.title || '');
-          }}
-        />
+        {webViewUrl ? (
+          <WebView
+            source={{ uri: webViewUrl }}
+            style={styles.webview}
+            onLoadStart={() => setLoading(true)}
+            onLoadEnd={() => setLoading(false)}
+            onLoadProgress={({ nativeEvent }) => {
+              setProgress(nativeEvent.progress);
+            }}
+            onNavigationStateChange={(navState) => {
+              setTitle(navState.title || '');
+            }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            scalesPageToFit
+            onError={(error) => console.error('WebView error:', error)}
+          />
+        ) : (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Invalid URL or loading error</Text>
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -124,6 +150,15 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#666',
+    fontSize: 16,
   },
 });
 

@@ -41,6 +41,8 @@ export interface IUserResponse extends IUser {
 }
 export interface IUser extends ILocation {
   _id?: string;
+  adsEngaged?: string[];
+  taskDone?: number;
   password?: string;
   email: string;
   name?: string;

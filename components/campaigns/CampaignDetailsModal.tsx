@@ -1,195 +1,205 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   Animated,
   Modal,
   Dimensions,
+  ActivityIndicator,
   Image,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Campaign } from '~/store/api/api';
 import Video from 'react-native-video';
-import { formatTaskDescription } from '~/utils/TaskFormatter';
+import { Adtype, Campaign } from '~/store/api/api';
+import { useCampaignActions, useCampaignInteractions } from '~/hooks/useCampaignActions';
+import { getDataFromAsyncStorage } from '~/utils/localStorage';
 
-const { height, width } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 interface CampaignDetailsModalProps {
   visible: boolean;
-  campaign: Campaign;
-  animation: Animated.Value;
-  hasJoined: boolean;
-  currentIndex: number;
+  campaign?: Campaign;
+  onViewTask: () => void;
   onClose: () => void;
-  onJoin: () => void;
 }
 
 const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
   visible,
   campaign,
-  animation,
-  hasJoined,
-  currentIndex,
+  onViewTask,
   onClose,
-  onJoin,
 }) => {
-  const [videoError, setVideoError] = useState(false);
-  const [selectedTab, setSelectedTab] = useState('about');
-  const scrollViewRef = useRef<ScrollView>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isVideoPaused, setIsVideoPaused] = useState(true);
+  const slideAnimation = useRef(new Animated.Value(height)).current;
+  const { toggleJoin } = useCampaignActions();
+  const { isParticipated, isPendingParticipation } = campaign
+    ? useCampaignInteractions(campaign.id)
+    : { isParticipated: false, isPendingParticipation: false };
 
-  // Reset scroll position when tab changes
-  const handleTabChange = (tab: string) => {
-    setSelectedTab(tab);
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ y: 0, animated: true });
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (visible && !isAnimating) {
+        handleClose();
+        return true;
+      }
+      return false;
+    });
+    return () => backHandler.remove();
+  }, [visible, isAnimating]);
+
+  useEffect(() => {
+    const fetchUserId = async () => {
+      try {
+        const id = await getDataFromAsyncStorage('id');
+        setUserId(id);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    fetchUserId();
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      setIsAnimating(true);
+      setIsVideoPaused(false);
+      slideAnimation.setValue(height);
+      Animated.timing(slideAnimation, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setIsAnimating(false));
+    } else {
+      setIsVideoPaused(true);
     }
+    return () => {
+      slideAnimation.stopAnimation();
+    };
+  }, [visible, slideAnimation]);
+
+  const handleClose = useCallback(() => {
+    if (isAnimating) return;
+    setIsAnimating(true);
+    setIsVideoPaused(true);
+    Animated.timing(slideAnimation, {
+      toValue: height,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsAnimating(false);
+      onClose();
+    });
+  }, [slideAnimation, isAnimating, onClose]);
+
+  const handleJoin = useCallback(() => {
+    if (!userId || !campaign || isPendingParticipation) return;
+    toggleJoin(userId, campaign.id, isParticipated);
+    onViewTask();
+  }, [userId, campaign, isPendingParticipation, toggleJoin, isParticipated, onViewTask]);
+
+  if (!campaign) {
+    return null;
+  }
+
+  const renderMedia = () => {
+    if (!campaign.mediaUrl) return null;
+    if (campaign.adType === Adtype.DISPLAY_ADS) {
+      return (
+        <Image
+          source={{ uri: campaign.mediaUrl }}
+          style={styles.detailsThumbnail}
+          resizeMode="cover"
+          onError={(error) => console.error(error)}
+        />
+      );
+    }
+    if (campaign.adType === Adtype.VIDEO_ADS) {
+      return (
+        <Video
+          source={{ uri: campaign.mediaUrl }}
+          style={styles.detailsThumbnail}
+          resizeMode="cover"
+          paused={isVideoPaused}
+          muted
+          ignoreSilentSwitch="ignore"
+          playInBackground={false}
+          onError={(error) => console.error(error)}
+          onLoad={() => setIsVideoPaused(false)}
+        />
+      );
+    }
+    return null;
   };
 
-  if (!campaign) return null;
-
   return (
-    <Modal transparent={true} visible={visible} animationType="none" onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
+    <Modal transparent visible={visible} animationType="none" onRequestClose={handleClose}>
+      <View style={styles.modalContainer}>
         <Animated.View
-          style={[styles.detailsPanelContent, { transform: [{ translateY: animation }] }]}>
+          style={[styles.detailsPanelContent, { transform: [{ translateY: slideAnimation }] }]}>
           <View style={styles.modalHandle} />
-
-          {/* Fixed Header */}
           <View style={styles.fixedHeaderContainer}>
             <View style={styles.detailsPanelHeader}>
               <Text style={styles.detailsPanelTitle}>Campaign Details</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
-
-            {/* Media Preview */}
-            {campaign.mediaUrl && (
-              <View style={styles.detailsMediaPreview}>
-                {campaign.adType === 'video_ads' && !videoError ? (
-                  <Video
-                    source={{ uri: campaign.mediaUrl }}
-                    style={styles.videoThumbnail}
-                    resizeMode="contain"
-                    paused={false}
-                    repeat={true}
-                    muted={true}
-                    onError={() => setVideoError(true)}
-                    rate={1.0}
-                    volume={0}
-                  />
-                ) : (
-                  <Image
-                    source={{ uri: campaign.mediaUrl }}
-                    style={styles.detailsThumbnail}
-                    resizeMode="cover"
-                  />
-                )}
-              </View>
-            )}
-
-            {/* Campaign Name and Business Badge */}
-            <Text style={styles.detailsCampaignName}>{campaign.name}</Text>
-
+            {renderMedia()}
+            <Text style={styles.detailsCampaignName}>{campaign.name || 'Unnamed Campaign'}</Text>
             <View style={styles.detailsBusinessBadge}>
               <Ionicons name="business" size={16} color="#666" />
               <Text style={styles.detailsBusinessName}>
                 {campaign.business?.name || 'Campaign Sponsor'}
               </Text>
             </View>
-
-            {/* Stats Row */}
             <View style={styles.detailsStatsRow}>
               <View style={styles.detailsStatItem}>
-                <Ionicons name="trophy" size={22} color="#ffc107" />
-                <Text style={styles.detailsStatValue}>{campaign.poyntReward || 100} Poynts</Text>
-                <Text style={styles.detailsStatLabel}>Reward</Text>
+                <Ionicons name="trophy" size={22} color="#F44336" />
+                <Text style={styles.detailsStatValue}>{campaign.poyntReward || 100}</Text>
+                <Text style={styles.detailsStatLabel}>Poynt Reward</Text>
               </View>
-
               <View style={styles.detailsStatItem}>
                 <Ionicons name="people" size={22} color="#2196F3" />
-                <Text style={styles.detailsStatValue}>{campaign.participants?.length || 0}</Text>
+                <Text style={styles.detailsStatValue}>{campaign.participantsCount || 0}</Text>
                 <Text style={styles.detailsStatLabel}>Participants</Text>
               </View>
-
               <View style={styles.detailsStatItem}>
                 <Ionicons name="heart" size={22} color="#F44336" />
-                <Text style={styles.detailsStatValue}>{campaign.likers?.length || 0}</Text>
+                <Text style={styles.detailsStatValue}>{campaign.likersCount || 0}</Text>
                 <Text style={styles.detailsStatLabel}>Likes</Text>
               </View>
             </View>
-
-            {/* Tab Navigation */}
-            <View style={styles.tabContainer}>
-              <TouchableOpacity
-                style={[styles.tabButton, selectedTab === 'about' && styles.activeTabButton]}
-                onPress={() => handleTabChange('about')}>
-                <Text style={[styles.tabText, selectedTab === 'about' && styles.activeTabText]}>
-                  About
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tabButton, selectedTab === 'tasks' && styles.activeTabButton]}
-                onPress={() => handleTabChange('tasks')}>
-                <Text style={[styles.tabText, selectedTab === 'tasks' && styles.activeTabText]}>
-                  Tasks
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
-
-          {/* Scrollable Content Area */}
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.scrollContainer}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-            bounces={true}
-            overScrollMode="always">
-            {/* Tab Content */}
-            {selectedTab === 'about' ? (
-              <View style={styles.detailsDescriptionSection}>
-                <Text style={styles.detailsDescription}>{campaign.description}</Text>
-              </View>
-            ) : (
-              <View style={styles.detailsTasksSection}>
-                {campaign.tasks && typeof campaign.tasks === 'object' ? (
-                  Object.entries(campaign.tasks).map(([key, value], index) => {
-                    const { icon, title, details } = formatTaskDescription(key, value as string);
-                    return (
-                      <View key={index} style={styles.detailsTaskCard}>
-                        <View style={styles.detailsTaskIconContainer}>
-                          <Ionicons name={icon} size={22} color="#B71C1C" />
-                        </View>
-                        <View style={styles.detailsTaskContent}>
-                          <Text style={styles.detailsTaskTitle}>{title}</Text>
-                          <Text style={styles.detailsTaskText}>{details}</Text>
-                        </View>
-                      </View>
-                    );
-                  })
-                ) : (
-                  <Text style={styles.noTasksText}>No tasks available for this campaign</Text>
-                )}
-              </View>
-            )}
-
-            {/* Add padding to ensure content doesn't hide behind the button */}
+          <View style={styles.scrollContainer}>
+            <View style={styles.detailsDescriptionSection}>
+              <Text style={styles.detailsDescription}>
+                {campaign.description || 'No description available'}
+              </Text>
+              <Text style={styles.detailsInfo}>
+                <Text style={styles.detailsInfoLabel}>Status: </Text>
+                {campaign.campaignStatus || 'Unknown'}
+              </Text>
+            </View>
             <View style={styles.bottomPadding} />
-          </ScrollView>
-
-          {/* Fixed Button at Bottom */}
+          </View>
           <View style={styles.actionButtonContainer}>
             <TouchableOpacity
-              style={hasJoined ? styles.startCampaignButtonJoined : styles.startCampaignButton}
-              onPress={onJoin}>
-              <Text style={styles.startCampaignText}>
-                {hasJoined ? 'View Tasks' : 'Join Campaign'}
-              </Text>
+              style={isParticipated ? styles.startCampaignButtonJoined : styles.startCampaignButton}
+              onPress={isParticipated ? onViewTask : handleJoin}
+              disabled={isPendingParticipation}>
+              {isPendingParticipation ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.startCampaignText}>
+                  {isParticipated ? 'View Tasks' : 'Join Campaign'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -199,10 +209,10 @@ const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalHandle: {
     width: 40,
@@ -210,8 +220,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e0e0',
     borderRadius: 3,
     alignSelf: 'center',
-    marginTop: 5,
-    marginBottom: 5,
+    marginVertical: 5,
   },
   detailsPanelContent: {
     backgroundColor: 'white',
@@ -235,7 +244,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#333333',
-    letterSpacing: 0.3,
   },
   closeButton: {
     width: 36,
@@ -245,31 +253,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  detailsMediaPreview: {
+  detailsThumbnail: {
     width: '100%',
     height: 180,
     borderRadius: 16,
-    overflow: 'hidden',
-    marginTop: 16,
-    marginBottom: 16,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  detailsThumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  videoThumbnail: {
-    width: '100%',
-    height: '100%',
+    marginVertical: 12,
   },
   detailsCampaignName: {
     fontSize: 22,
     fontWeight: 'bold',
     color: '#333333',
     marginBottom: 8,
-    letterSpacing: 0.3,
   },
   detailsBusinessBadge: {
     flexDirection: 'row',
@@ -285,7 +279,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#555555',
     fontWeight: '500',
-    letterSpacing: 0.2,
     marginLeft: 6,
   },
   detailsStatsRow: {
@@ -304,36 +297,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333333',
     fontWeight: '700',
-    marginTop: 6,
-    marginBottom: 2,
+    marginVertical: 6,
   },
   detailsStatLabel: {
     fontSize: 12,
     color: '#777777',
-    fontWeight: '400',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  activeTabButton: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#B71C1C',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#777777',
-  },
-  activeTabText: {
-    color: '#B71C1C',
-    fontWeight: '600',
   },
   scrollContainer: {
     flex: 1,
@@ -349,55 +317,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333333',
     lineHeight: 22,
-    letterSpacing: 0.2,
-    fontWeight: '400',
+    marginBottom: 16,
   },
-  detailsTasksSection: {
-    marginBottom: 24,
-  },
-  detailsTaskCard: {
-    flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-  },
-  detailsTaskIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ffebee',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  detailsTaskContent: {
-    flex: 1,
-  },
-  detailsTaskTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  detailsTaskText: {
-    fontSize: 13,
-    color: '#666666',
-    lineHeight: 18,
-  },
-  noTasksText: {
+  detailsInfo: {
     fontSize: 14,
-    color: '#666666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 16,
+    color: '#333333',
+  },
+  detailsInfoLabel: {
+    fontWeight: '600',
   },
   bottomPadding: {
     height: 70,
   },
   actionButtonContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    padding: 20,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
     backgroundColor: 'white',
@@ -418,7 +351,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
-    letterSpacing: 0.2,
   },
 });
 

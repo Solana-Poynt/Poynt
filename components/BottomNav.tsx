@@ -9,6 +9,7 @@ export default function BottomNav() {
   const pathname = usePathname();
   const [navItems, setNavItems] = useState<any>([]);
   const isHomeScreen = pathname === '/screens/home';
+  const walletScreen = pathname === '/screens/wallet';
 
   // Fetch role and set navigation items after the component mounts
   useEffect(() => {
@@ -28,8 +29,8 @@ export default function BottomNav() {
         //   inactiveIcon: 'scan-outline',
         // },
         {
-          name: 'Notifications',
-          path: '/screens/notifications',
+          name: 'Leaderboard',
+          path: '/screens/leaderboard',
           activeIcon: 'medal',
           inactiveIcon: 'medal-outline',
         },

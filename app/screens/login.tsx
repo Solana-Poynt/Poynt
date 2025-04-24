@@ -97,7 +97,7 @@ export default function LoginScreen() {
     try {
       const { message, accessToken, refreshToken, data: user } = loginData;
       showNotification(message || 'Login successful', 'success');
-      
+
       dispatch(
         setIsAuth({
           accessToken: accessToken || '',

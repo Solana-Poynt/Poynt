@@ -1,3 +1,4 @@
+// isAuthSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import {
   getDataFromAsyncStorage,
@@ -5,6 +6,7 @@ import {
   deleteDataFromAsyncStorage,
 } from '../../utils/localStorage';
 import { IUser } from '~/app/interfaces/interfaces';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Define the types for the state and payloads
 interface AuthState {
@@ -22,17 +24,50 @@ interface SetIsAuthPayload {
 
 // Initial state
 const initialState: AuthState = {
-  isAuth: false, // Set to false initially, will be updated when checkAuthStatus is called
+  isAuth: false,
   accessToken: null,
   refreshToken: null,
 };
 
 // Async function to check authentication status based on stored tokens
 export const checkAuthStatus = () => async (dispatch: any) => {
-  const accessToken = await getDataFromAsyncStorage('accessToken');
-  const refreshToken = await getDataFromAsyncStorage('refreshToken');
-  if (accessToken && refreshToken) {
-    dispatch(setIsAuth({ accessToken, refreshToken, user: {} as IUser }));
+  try {
+    const accessToken = await getDataFromAsyncStorage('accessToken');
+    const refreshToken = await getDataFromAsyncStorage('refreshToken');
+    if (accessToken && refreshToken) {
+      dispatch(setIsAuth({ accessToken, refreshToken, user: {} as IUser }));
+    } else {
+      dispatch(logOut()); // Ensure state is cleared if no tokens
+    }
+  } catch (error) {
+    console.error('[isAuthSlice] Error checking auth status:', error);
+    dispatch(logOut());
+  }
+};
+
+// Async action creator for logging out
+export const logOutAsync = () => async (dispatch: any) => {
+  try {
+    console.log('[isAuthSlice] Logging out');
+    await AsyncStorage.multiRemove([
+      'accessToken',
+      'refreshToken',
+      'id',
+      'email',
+      'name',
+      'photo',
+      'role',
+      'x_account',
+      'x_access_token',
+      'x_refresh_token',
+      'x_token_expiry',
+      'x_code_verifier',
+      'x_code_challenge',
+    ]);
+    console.log('[isAuthSlice] AsyncStorage cleared');
+    dispatch(logOut());
+  } catch (error) {
+    console.error('[isAuthSlice] Error during logout:', error);
   }
 };
 
@@ -55,29 +90,12 @@ export const isAuthSlice = createSlice({
       state.isAuth = false;
       state.accessToken = null;
       state.refreshToken = null;
-
-      // Remove tokens from AsyncStorage
-      deleteDataFromAsyncStorage('accessToken');
-      deleteDataFromAsyncStorage('refreshToken');
     },
   },
 });
 
-// / Exporting the actions
+// Exporting the actions
 export const { setIsAuth, logOut } = isAuthSlice.actions;
-
-// // Async action creator for logging out
-// export const logOutAsync = () => async (dispatch: any) => {
-//   try {
-//     await Promise.all([
-//       deleteDataFromAsyncStorage('accessToken'),
-//       deleteDataFromAsyncStorage('refreshToken'),
-//     ]);
-//     dispatch(logOut());
-//   } catch (error) {
-//     console.error('Error during logout:', error);
-//   }
-// };
 
 // Export the reducer
 export default isAuthSlice.reducer;

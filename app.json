@@ -3,7 +3,7 @@
     "name": "Poynt",
     "slug": "Poynt",
     "version": "1.0.0",
-    "scheme": "com.alphar33.poynt",
+    "scheme": "poynt",
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -39,14 +39,13 @@
         "foregroundImage": "./assets/ts2.png",
         "backgroundColor": "#ffffff"
       },
-      "googleServicesFile": false,
       "package": "com.alphar33.Poynt",
       "intentFilters": [
         {
           "action": "VIEW",
           "category": ["DEFAULT", "BROWSABLE"],
           "data": {
-            "scheme": "com.alphar33.poynt"
+            "scheme": "poynt"
           }
         }
       ]
@@ -58,7 +57,6 @@
       "eas": {
         "projectId": "6e5b05bf-58b6-467c-afa3-4f126091ec35"
       }
-    },
-    "assets": ["./assets/trans.png"]
+    }
   }
 }

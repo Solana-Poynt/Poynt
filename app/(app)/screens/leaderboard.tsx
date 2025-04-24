@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import ComingSoon from '~/components/coming';
 
-const Notifications = () => {
+const Leaderboard = () => {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
@@ -12,7 +12,7 @@ const Notifications = () => {
   );
 };
 
-export default Notifications;
+export default Leaderboard;
 
 const styles = StyleSheet.create({
   container: {
