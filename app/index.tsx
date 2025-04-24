@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, Stack } from 'expo-router';
 import AppButton from '~/components/appButton';
 import { View, SafeAreaView, ImageBackground, Dimensions, FlatList } from 'react-native';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, FlatList as FlatListType } from 'react-native';
 import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage';
 import { Text, ActivityIndicator, Image } from 'react-native';
 
@@ -20,12 +20,18 @@ const onboardData = [
   },
   {
     image: require('../assets/onboard.png'),
-    desc: 'contribute, interact, and earn Poynts',
+    desc: 'Contribute, interact, and earn Poynts',
     isSelected: false,
   },
 ];
 
 const { width } = Dimensions.get('window');
+
+interface OnboardItem {
+  image: any;
+  desc: string;
+  isSelected: boolean;
+}
 
 export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -33,19 +39,16 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const router = useRouter();
-  const flatListRef: any = useCallback((node: any) => {
-    if (node !== null) {
-    }
-  }, []);
+  const flatListRef = useRef<FlatListType<OnboardItem>>(null); 
 
-  // 3. Handler functions using useCallback
+  // Handler functions using useCallback
   const handleLoginFlag = useCallback(async () => {
     try {
-      await saveDataToAsyncStorage('userHasOnboarded', "true");
-      router.push('/screens/login' as any);
+      await saveDataToAsyncStorage('userHasOnboarded', 'true');
+      router.push('/screens/login');
     } catch (error) {
       console.error('Error saving onboarding status:', error);
-      router.push('/screens/login' as any);
+      router.push('/screens/login');
     }
   }, [router]);
 
@@ -56,8 +59,8 @@ export default function Home() {
 
       if (refreshToken) {
         router.replace('/screens/home');
-      } else if (userHasOnboarded === ("true")) {
-        router.replace('/screens/login' as any);
+      } else if (userHasOnboarded === 'true') {
+        router.replace('/screens/login');
       } else {
         setShowOnboarding(true);
       }
@@ -73,17 +76,20 @@ export default function Home() {
     checkUserStatus();
   }, [checkUserStatus]);
 
-  const renderOnboardingScreen = useCallback(({ item, index }: any) => {
-    return (
-      <View style={styles.slideContainer}>
-        <ImageBackground source={item.image} style={styles.backgroundImage} resizeMode="cover">
-          <View style={styles.bottomContentContainer}>
-            <Text style={styles.introText}>{item.desc}</Text>
-          </View>
-        </ImageBackground>
-      </View>
-    );
-  }, []);
+  const renderOnboardingScreen = useCallback(
+    ({ item, index }: { item: OnboardItem; index: number }) => {
+      return (
+        <View style={styles.slideContainer}>
+          <ImageBackground source={item.image} style={styles.backgroundImage} resizeMode="cover">
+            <View style={styles.bottomContentContainer}>
+              <Text style={styles.introText}>{item.desc}</Text>
+            </View>
+          </ImageBackground>
+        </View>
+      );
+    },
+    []
+  );
 
   const handleScroll = useCallback(
     (event: any) => {

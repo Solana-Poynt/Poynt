@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,18 @@ import {
   TouchableOpacity,
   ImageBackground,
   Dimensions,
-  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoPlayer from './VideoPlayer';
 import SideActions from './SideActions';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Campaign, Adtype } from '~/store/api/api';
 
 const { width, height } = Dimensions.get('window');
 
 interface CampaignItemProps {
-  item: any;
+  item: Campaign;
   index: number;
   currentIndex: number;
   isLastItem: boolean;
@@ -26,18 +26,20 @@ interface CampaignItemProps {
   expandedDescription: boolean;
   isLiked: boolean;
   likeCount: number;
-  followState: { [key: number]: boolean };
-  hasJoined: { [key: number]: boolean };
+  hasJoined: boolean;
+  isPendingLike: boolean;
+  isPendingJoin: boolean;
   progress: number;
   totalTasks: number;
   isCompleted: boolean;
-  onToggleVideo: (index: number) => void;
+  onToggleVideo: () => void;
   onToggleDescription: () => void;
-  onDetailsPress: () => void;
+  toggleDetailsPanel: () => void;
   onTrophyPress: () => void;
+  onWebsitePress: () => void;
   onLikePress: () => void;
-  onFollowPress: () => void;
-  onWebsitePress?: () => void;
+  isOffline: boolean;
+  userId: string | null;
 }
 
 const CampaignItem: React.FC<CampaignItemProps> = ({
@@ -50,18 +52,20 @@ const CampaignItem: React.FC<CampaignItemProps> = ({
   expandedDescription,
   isLiked,
   likeCount,
-  followState,
   hasJoined,
+  isPendingLike,
+  isPendingJoin,
   progress,
   totalTasks,
   isCompleted,
   onToggleVideo,
   onToggleDescription,
-  onDetailsPress,
+  toggleDetailsPanel,
   onTrophyPress,
-  onLikePress,
-  onFollowPress,
   onWebsitePress,
+  onLikePress,
+  isOffline,
+  userId,
 }) => {
   if (!item) {
     return (
@@ -73,33 +77,23 @@ const CampaignItem: React.FC<CampaignItemProps> = ({
     );
   }
 
-  const isVideo = item.adType === 'video_ads';
-  const isPaused = videoPaused === true;
-  const isFollowing = followState[index] || false;
-
-  // Extract business name
-  const businessName =
-    item.businessName || item.business?.name || item.name?.split(' ')[0] || 'Campaign';
-  const campaignName = item.name || item.business?.name || 'Campaign';
-
-  // Process media URL
+  const isVideo = item.adType === Adtype.VIDEO_ADS;
   const mediaUrl = item.mediaUrl || '';
-  const hasWebsite = !!item.cta?.url;
+  const businessName = item.business?.name || item.name?.split(' ')[0] || 'Campaign';
+  const campaignName = item.name || 'Campaign';
+
+  // console.log(mediaUrl);
 
   const renderContent = () => (
     <SafeAreaView style={styles.contentContainer}>
       <View style={[styles.bottomSection, isLastItem && { marginBottom: 80 }]}>
         <View style={styles.businessInfoContainer}>
           <Text style={styles.campaignName}>{campaignName}</Text>
-
-          <View style={styles.businessRow}>
+          <View style={styles.businessNameContainer}>
             <Text style={styles.businessName}>{businessName}</Text>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark-circle" size={16} color="#1DA1F2" />
-            </View>
+            <Ionicons name="checkmark-circle" size={16} color="#1DA1F2" style={styles.checkmark} />
           </View>
         </View>
-
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={onToggleDescription}
@@ -108,31 +102,29 @@ const CampaignItem: React.FC<CampaignItemProps> = ({
             style={styles.campaignDescription}
             numberOfLines={expandedDescription ? undefined : 2}>
             {item.description}
-            {!expandedDescription && item.description.length > 80 && (
+            {!expandedDescription && item.description?.length > 80 && (
               <Text style={styles.moreText}> more</Text>
             )}
           </Text>
         </TouchableOpacity>
-
-        <TouchableOpacity onPress={onDetailsPress} style={styles.startButton}>
-          <Text style={styles.startButtonText}>Join Campaign</Text>
+        <TouchableOpacity onPress={toggleDetailsPanel} style={styles.detailsButton}>
+          <Text style={styles.detailsButtonText}>Start Task</Text>
         </TouchableOpacity>
       </View>
-
-      {/* Side actions */}
       <SideActions
-        isCompleted={isCompleted}
-        progress={progress}
-        totalTasks={totalTasks}
         isLiked={isLiked}
         likeCount={likeCount}
-        isFollowing={isFollowing}
-        hasJoined={hasJoined[index] || false}
+        reached={item.reached || 0}
+        hasJoined={hasJoined}
+        completedTasks={progress}
+        totalTasks={totalTasks}
+        isCompleted={isCompleted}
         onTrophyPress={onTrophyPress}
         onLikePress={onLikePress}
-        onFollowPress={onFollowPress}
-        onWebsitePress={hasWebsite ? onWebsitePress : undefined}
-        showWebsite={hasWebsite}
+        onWebsitePress={onWebsitePress}
+        isPendingLike={isPendingLike}
+        isPendingJoin={isPendingJoin}
+        isOffline={isOffline}
       />
     </SafeAreaView>
   );
@@ -140,20 +132,21 @@ const CampaignItem: React.FC<CampaignItemProps> = ({
   if (isVideo) {
     return (
       <View style={styles.campaignContainer}>
-        <VideoPlayer
-          uri={mediaUrl}
-          paused={isPaused}
-          index={index}
-          onRef={(ref, idx) => {
-            videoRefs.current[idx] = ref;
-          }}
-          onTogglePlayback={onToggleVideo}
-        />
+        <View style={styles.videoWrapper}>
+          <VideoPlayer
+            uri={mediaUrl}
+            paused={videoPaused}
+            index={index}
+            onRef={(ref, idx) => {
+              videoRefs.current[idx] = ref;
+            }}
+          />
+        </View>
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
           style={styles.overlay}
         />
-        <View>{renderContent()}</View>
+        {renderContent()}
       </View>
     );
   } else if (mediaUrl) {
@@ -193,9 +186,13 @@ const CampaignItem: React.FC<CampaignItemProps> = ({
 
 const styles = StyleSheet.create({
   campaignContainer: {
-    width: width,
-    height: height,
+    width,
+    height,
     backgroundColor: '#000',
+  },
+  videoWrapper: {
+    flex: 1,
+    zIndex: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -214,7 +211,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     backgroundColor: '#000',
     width: '100%',
-    height: height,
+    height,
   },
   overlay: {
     position: 'absolute',
@@ -233,7 +230,7 @@ const styles = StyleSheet.create({
   bottomSection: {
     marginBottom: 40,
     position: 'absolute',
-    bottom: 24,
+    bottom: '10%',
     left: 16,
     width: '75%',
     zIndex: 5,
@@ -241,25 +238,31 @@ const styles = StyleSheet.create({
   businessInfoContainer: {
     marginBottom: 16,
   },
-  businessRow: {
+  campaignName: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  businessNameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
   },
-  campaignName: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
   businessName: {
     color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '300',
     letterSpacing: 0.3,
   },
-  verifiedBadge: {
+  checkmark: {
     marginLeft: 4,
+  },
+  rewardText: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
   },
   descriptionContainer: {
     marginBottom: 18,
@@ -275,7 +278,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
     fontWeight: '400',
   },
-  startButton: {
+  detailsButton: {
     backgroundColor: '#B71C1C',
     width: '70%',
     alignItems: 'center',
@@ -284,7 +287,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
   },
-  startButtonText: {
+  detailsButtonText: {
     color: 'white',
     fontWeight: '500',
     fontSize: 15,

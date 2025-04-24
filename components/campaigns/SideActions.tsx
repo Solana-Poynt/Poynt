@@ -1,79 +1,118 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useSelector } from 'react-redux';
+import { selectSyncErrors } from '~/store/slices/isApiQueueSlice';
 
 interface SideActionsProps {
-  isCompleted: boolean;
-  progress: number;
-  totalTasks: number;
   isLiked: boolean;
   likeCount: number;
-  isFollowing: boolean;
+  reached: number;
   hasJoined: boolean;
+  completedTasks: number;
+  totalTasks: number;
+  isCompleted: boolean;
   onTrophyPress: () => void;
   onLikePress: () => void;
-  onFollowPress: () => void;
   onWebsitePress?: () => void;
   showWebsite?: boolean;
+  isPendingLike: boolean;
+  isPendingJoin: boolean;
+  isOffline: boolean;
 }
 
 const SideActions: React.FC<SideActionsProps> = ({
-  isCompleted,
-  progress,
-  totalTasks,
   isLiked,
   likeCount,
-  isFollowing,
+  reached,
   hasJoined,
+  completedTasks = 0,
+  totalTasks = 0,
+  isCompleted,
   onTrophyPress,
   onLikePress,
-  onFollowPress,
   onWebsitePress,
-  showWebsite = false,
+  showWebsite = true,
+  isPendingLike,
+  isPendingJoin,
+  isOffline,
 }) => {
+  const syncErrors = useSelector(selectSyncErrors);
+  const hasLikeError = Object.values(syncErrors).some((error) => error.includes('like'));
+  const scale = useSharedValue(0);
+  const opacity = useSharedValue(0);
+
+  const handleLikePress = () => {
+    onLikePress();
+    if (!isLiked && !isPendingLike) {
+      scale.value = withTiming(1, { duration: 500 });
+      opacity.value = withTiming(1, { duration: 500 });
+    }
+  };
+
   return (
     <View style={styles.sideActionsContainer}>
-      <TouchableOpacity style={styles.sideActionButton} onPress={onTrophyPress}>
-        <View style={styles.trophyContainer}>
+      <TouchableOpacity
+        style={[styles.sideActionButton, (isPendingJoin || isOffline) && styles.disabledButton]}
+        onPress={onTrophyPress}
+        disabled={isPendingJoin || isOffline}>
+        {isPendingJoin ? (
+          <ActivityIndicator size="small" color="#FFF" />
+        ) : (
           <Ionicons
-            name={isCompleted ? 'trophy' : 'trophy-outline'}
+            name={hasJoined ? 'trophy' : 'trophy-outline'}
             size={28}
-            color={isCompleted ? '#B71C1C' : 'white'}
+            color={hasJoined ? '#B71C1C' : 'white'}
           />
+        )}
+        <View style={styles.progressDots}>
+          {[1, 2, 3].map((dot) => (
+            <View
+              key={dot}
+              style={[
+                styles.progressDot,
+                dot <= completedTasks && totalTasks >= dot
+                  ? styles.progressDotFilled
+                  : styles.progressDotEmpty,
+              ]}
+            />
+          ))}
         </View>
         <Text style={styles.sideActionText}>
-          {progress}/{totalTasks}
+          {hasJoined ? (isCompleted ? 'Completed' : `${completedTasks}/${totalTasks}`) : 'Join'}
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.sideActionButton} onPress={onLikePress}>
-        <Ionicons
-          name={isLiked ? 'heart' : 'heart-outline'}
-          size={28}
-          color={isLiked ? '#B71C1C' : 'white'}
-        />
+      <View style={styles.sideActionButton}>
+        <TouchableOpacity
+          style={[(isPendingLike || isOffline) && styles.disabledButton]}
+          onPress={handleLikePress}
+          disabled={isPendingLike || isOffline}>
+          {isPendingLike ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <Ionicons
+              name={isLiked ? 'heart' : 'heart-outline'}
+              size={28}
+              color={isLiked ? '#B71C1C' : 'white'}
+            />
+          )}
+        </TouchableOpacity>
         <Text style={styles.sideActionText}>
           {likeCount > 999 ? `${(likeCount / 1000).toFixed(1)}K` : likeCount}
         </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.sideActionButton} onPress={onFollowPress}>
-        {isFollowing ? (
-          <Ionicons name="person" size={28} color="white" />
-        ) : (
-          <View style={styles.plusIconContainer}>
-            <Ionicons name="person-outline" size={24} color="white" />
-            <Ionicons name="add" size={16} color="white" style={styles.plusIcon} />
-          </View>
+        {hasLikeError && !isPendingLike && (
+          <Text style={styles.errorText}>Like failed. Tap to retry.</Text>
         )}
-        <Text style={styles.sideActionText}>{isFollowing ? 'Following' : 'Follow'}</Text>
-      </TouchableOpacity>
+      </View>
 
       {showWebsite && onWebsitePress && (
-        <TouchableOpacity style={styles.sideActionButton} onPress={onWebsitePress}>
-          <View style={styles.plusIconContainer}>
-            <Ionicons name="globe-outline" size={24} color="white" />
-          </View>
+        <TouchableOpacity
+          style={[styles.sideActionButton, isOffline && styles.disabledButton]}
+          onPress={onWebsitePress}
+          disabled={isOffline}>
+          <Ionicons name="globe-outline" size={28} color="white" />
           <Text style={styles.sideActionText}>Website</Text>
         </TouchableOpacity>
       )}
@@ -84,8 +123,8 @@ const SideActions: React.FC<SideActionsProps> = ({
 const styles = StyleSheet.create({
   sideActionsContainer: {
     position: 'absolute',
-    right: 16,
-    bottom: 140,
+    right: 10,
+    bottom: 210,
     alignItems: 'center',
     zIndex: 4,
   },
@@ -93,37 +132,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 22,
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   sideActionText: {
     color: 'white',
     fontSize: 13,
     marginTop: 4,
     fontWeight: '500',
   },
-  trophyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    width: 52,
-    height: 52,
+  progressDots: {
+    flexDirection: 'row',
+    marginTop: 4,
   },
-  plusIconContainer: {
-    position: 'relative',
-    width: 52,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 2,
   },
-  plusIcon: {
-    position: 'absolute',
-    bottom: 6,
-    right: 6,
+  progressDotFilled: {
     backgroundColor: '#B71C1C',
-    borderRadius: 8,
-    width: 16,
-    height: 16,
+  },
+  progressDotEmpty: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  errorText: {
+    color: '#FF4444',
+    fontSize: 12,
+    marginTop: 4,
     textAlign: 'center',
-    lineHeight: 16,
-    overflow: 'hidden',
   },
 });
 

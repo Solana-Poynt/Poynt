@@ -1,5 +1,9 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { getDataFromAsyncStorage, saveDataToAsyncStorage } from '~/utils/localStorage';
+import {
+  getDataFromAsyncStorage,
+  saveDataToAsyncStorage,
+  deleteDataFromAsyncStorage,
+} from '~/utils/localStorage';
 
 // Define the shape of our context
 interface AuthContextType {
@@ -47,7 +51,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Logout function to clear token and update state
   const logout = async () => {
     try {
-      await saveDataToAsyncStorage('refreshToken', '');
+      await deleteDataFromAsyncStorage('refreshToken');
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Logout error:', error);
