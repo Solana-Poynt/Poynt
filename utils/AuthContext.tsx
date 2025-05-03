@@ -52,6 +52,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     try {
       await deleteDataFromAsyncStorage('refreshToken');
+      await deleteDataFromAsyncStorage('id');
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Logout error:', error);

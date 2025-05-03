@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ImageBackground,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,7 +14,6 @@ import VideoPlayer from './VideoPlayer';
 import SideActions from './SideActions';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Campaign, Adtype } from '~/store/api/api';
-
 const { width, height } = Dimensions.get('window');
 
 interface CampaignItemProps {
@@ -40,159 +40,270 @@ interface CampaignItemProps {
   onLikePress: () => void;
   isOffline: boolean;
   userId: string | null;
+  isVisible: boolean;
+  isNext: boolean;
+  isPreloading?: boolean;
+  registerVideoRef?: (ref: any) => void;  // Add these two props
+  markVideoReady?: () => void;
 }
 
-const CampaignItem: React.FC<CampaignItemProps> = ({
-  item,
-  index,
-  currentIndex,
-  isLastItem,
-  videoRefs,
-  videoPaused,
-  expandedDescription,
-  isLiked,
-  likeCount,
-  hasJoined,
-  isPendingLike,
-  isPendingJoin,
-  progress,
-  totalTasks,
-  isCompleted,
-  onToggleVideo,
-  onToggleDescription,
-  toggleDetailsPanel,
-  onTrophyPress,
-  onWebsitePress,
-  onLikePress,
-  isOffline,
-  userId,
-}) => {
-  if (!item) {
-    return (
-      <View style={styles.campaignContainer}>
-        <View style={[styles.loadingContainer, { backgroundColor: '#111' }]}>
-          <Text style={styles.loadingText}>Error loading campaign</Text>
-        </View>
-      </View>
-    );
-  }
+const CampaignItem: React.FC<CampaignItemProps> = memo(
+  ({
+    item,
+    index,
+    isLastItem,
+    videoRefs,
+    videoPaused,
+    expandedDescription,
+    isLiked,
+    likeCount,
+    hasJoined,
+    isPendingLike,
+    isPendingJoin,
+    progress,
+    totalTasks,
+    isCompleted,
+    onToggleDescription,
+    toggleDetailsPanel,
+    onTrophyPress,
+    onWebsitePress,
+    onLikePress,
+    isOffline,
+    isVisible,
+    isNext,
+    isPreloading = false,
+    registerVideoRef,
+    markVideoReady,
+  }) => {
+    const contentRef = useRef<View>(null);
+    const hasVideoLoaded = useRef<boolean>(false);
 
-  const isVideo = item.adType === Adtype.VIDEO_ADS;
-  const mediaUrl = item.mediaUrl || '';
-  const businessName = item.business?.name || item.name?.split(' ')[0] || 'Campaign';
-  const campaignName = item.name || 'Campaign';
+    // Track when this component first becomes visible
+    useEffect(() => {
+      if (isVisible && !hasVideoLoaded.current) {
+        hasVideoLoaded.current = true;
+      }
+    }, [isVisible]);
 
-  // console.log(mediaUrl);
-
-  const renderContent = () => (
-    <SafeAreaView style={styles.contentContainer}>
-      <View style={[styles.bottomSection, isLastItem && { marginBottom: 80 }]}>
-        <View style={styles.businessInfoContainer}>
-          <Text style={styles.campaignName}>{campaignName}</Text>
-          <View style={styles.businessNameContainer}>
-            <Text style={styles.businessName}>{businessName}</Text>
-            <Ionicons name="checkmark-circle" size={16} color="#1DA1F2" style={styles.checkmark} />
+    if (!item) {
+      return (
+        <View style={styles.campaignContainer}>
+          <View style={[styles.loadingContainer, { backgroundColor: '#111' }]}>
+            <Text style={styles.loadingText}>Error loading campaign</Text>
           </View>
         </View>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={onToggleDescription}
-          style={styles.descriptionContainer}>
-          <Text
-            style={styles.campaignDescription}
-            numberOfLines={expandedDescription ? undefined : 2}>
-            {item.description}
-            {!expandedDescription && item.description?.length > 80 && (
-              <Text style={styles.moreText}> more</Text>
-            )}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={toggleDetailsPanel} style={styles.detailsButton}>
-          <Text style={styles.detailsButtonText}>Start Task</Text>
-        </TouchableOpacity>
-      </View>
-      <SideActions
-        isLiked={isLiked}
-        likeCount={likeCount}
-        reached={item.reached || 0}
-        hasJoined={hasJoined}
-        completedTasks={progress}
-        totalTasks={totalTasks}
-        isCompleted={isCompleted}
-        onTrophyPress={onTrophyPress}
-        onLikePress={onLikePress}
-        onWebsitePress={onWebsitePress}
-        isPendingLike={isPendingLike}
-        isPendingJoin={isPendingJoin}
-        isOffline={isOffline}
-      />
-    </SafeAreaView>
-  );
+      );
+    }
 
-  if (isVideo) {
-    return (
-      <View style={styles.campaignContainer}>
-        <View style={styles.videoWrapper}>
-          <VideoPlayer
-            uri={mediaUrl}
-            paused={videoPaused}
-            index={index}
-            onRef={(ref, idx) => {
-              videoRefs.current[idx] = ref;
-            }}
-          />
+    const isVideo = item.adType === Adtype.VIDEO_ADS;
+    const mediaUrl = item.mediaUrl || '';
+    const businessName = item.business?.name || item.name?.split(' ')[0] || 'Campaign';
+    const campaignName = item.name || 'Campaign';
+
+    // Updated handler for video references
+    const handleVideoRef = (ref: any, idx: number) => {
+      if (ref) {
+        // Use the old method for backward compatibility
+        videoRefs.current[idx] = ref;
+        
+        // Use the new method if available
+        if (registerVideoRef) {
+          registerVideoRef(ref);
+        }
+      }
+    };
+
+    const renderContent = () => (
+      <SafeAreaView
+        style={[styles.contentContainer, isLastItem && { marginBottom: 60 }]}
+        pointerEvents="box-none"
+        ref={contentRef}>
+        <View style={[styles.bottomSection]}>
+          <View style={styles.businessInfoContainer}>
+            <Text style={styles.campaignName} numberOfLines={1} ellipsizeMode="tail">
+              {campaignName}
+            </Text>
+            <View style={styles.businessNameContainer}>
+              <Text style={styles.businessName} numberOfLines={1} ellipsizeMode="tail">
+                {businessName}
+              </Text>
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color="#1DA1F2"
+                style={styles.checkmark}
+              />
+            </View>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={onToggleDescription}
+            style={styles.descriptionContainer}>
+            <Text
+              style={styles.campaignDescription}
+              numberOfLines={expandedDescription ? undefined : 2}>
+              {item.description}
+              {!expandedDescription && item.description?.length > 80 && (
+                <Text style={styles.moreText}> more</Text>
+              )}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={toggleDetailsPanel}
+            style={styles.detailsButton}
+            activeOpacity={0.7}>
+            <Text style={styles.detailsButtonText}>Start Task</Text>
+          </TouchableOpacity>
         </View>
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
-          style={styles.overlay}
+        <SideActions
+          isLiked={isLiked}
+          likeCount={likeCount}
+          reached={item.reached || 0}
+          hasJoined={hasJoined}
+          completedTasks={progress}
+          totalTasks={totalTasks}
+          isCompleted={isCompleted}
+          onTrophyPress={onTrophyPress}
+          onLikePress={onLikePress}
+          onWebsitePress={onWebsitePress}
+          isPendingLike={isPendingLike}
+          isPendingJoin={isPendingJoin}
+          isOffline={isOffline}
         />
-        {renderContent()}
-      </View>
+      </SafeAreaView>
     );
-  } else if (mediaUrl) {
-    return (
-      <View style={styles.campaignContainer}>
-        <ImageBackground
-          source={{ uri: mediaUrl }}
-          style={styles.campaignBackground}
-          resizeMode="contain">
+
+    if (isVideo) {
+      return (
+        <View style={styles.campaignContainer}>
+          <View style={styles.videoWrapper}>
+            <VideoPlayer
+              uri={mediaUrl}
+              paused={videoPaused}
+              index={index}
+              onRef={handleVideoRef}
+              isVisible={isVisible}
+              isNext={isNext}
+              isPreloading={isPreloading}
+              markVideoReady={markVideoReady}
+            />
+          </View>
           <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
+            colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
             style={styles.overlay}
-          />
-          {renderContent()}
-        </ImageBackground>
-      </View>
-    );
-  } else {
-    return (
-      <View style={styles.campaignContainer}>
-        <View
-          style={[
-            styles.campaignBackground,
-            { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
-          ]}>
-          <Text style={styles.loadingText}>Media not available</Text>
-          <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
-            style={styles.overlay}
+            pointerEvents="none"
           />
           {renderContent()}
         </View>
-      </View>
-    );
-  }
-};
+      );
+    } else if (mediaUrl) {
+      return (
+        <View style={styles.campaignContainer}>
+          <ImageBackground
+            source={{ uri: mediaUrl }}
+            style={styles.campaignBackground}
+            resizeMode="contain"
+            // Enhanced image loading properties
+            fadeDuration={isVisible ? 300 : 0} // Fade in when visible
+            progressiveRenderingEnabled={true} // Progressive jpeg rendering
+            onLoadStart={() => {
+              // Track image load start time if needed
+            }}
+            onLoadEnd={() => {
+              // Track image load complete if needed
+              // Mark image as ready for parent component if available
+              if (markVideoReady) {
+                markVideoReady();
+              }
+            }}>
+            <LinearGradient
+              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
+              style={styles.overlay}
+              pointerEvents="none"
+            />
+            {renderContent()}
+          </ImageBackground>
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.campaignContainer}>
+          <View
+            style={[
+              styles.campaignBackground,
+              { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' },
+            ]}>
+            <Text style={styles.loadingText}>Media not available</Text>
+            <LinearGradient
+              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
+              style={styles.overlay}
+              pointerEvents="none"
+            />
+            {renderContent()}
+          </View>
+        </View>
+      );
+    }
+  },
+  // Enhanced memoization comparison function
+  (prevProps, nextProps) => {
+    // Check crucial props for performance
 
+    // Always re-render when visibility changes
+    if (prevProps.isVisible !== nextProps.isVisible) return false;
+
+    // Always re-render when preloading status changes
+    if (prevProps.isPreloading !== nextProps.isPreloading) return false;
+
+    // Always re-render when the item changes
+    if (prevProps.item.id !== nextProps.item.id) return false;
+
+    // Always re-render when expanded state changes
+    if (prevProps.expandedDescription !== nextProps.expandedDescription) return false;
+
+    // Always re-render when progress changes
+    if (prevProps.progress !== nextProps.progress) return false;
+
+    // Always re-render when completion changes
+    if (prevProps.isCompleted !== nextProps.isCompleted) return false;
+
+    // Always re-render when like/join state changes
+    if (
+      prevProps.isLiked !== nextProps.isLiked ||
+      prevProps.hasJoined !== nextProps.hasJoined ||
+      prevProps.isPendingLike !== nextProps.isPendingLike ||
+      prevProps.isPendingJoin !== nextProps.isPendingJoin
+    )
+      return false;
+
+    // Otherwise, consider the component unchanged
+    return true;
+  }
+);
+
+// Enhanced styles with optimizations
 const styles = StyleSheet.create({
   campaignContainer: {
     width,
     height,
     backgroundColor: '#000',
+    // Add hardware acceleration hints
+    ...Platform.select({
+      android: {
+        elevation: 0,
+        overflow: 'hidden',
+      },
+      ios: {
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        shadowOffset: { height: 0, width: 0 },
+      },
+    }),
   },
   videoWrapper: {
     flex: 1,
     zIndex: 0,
+    backgroundColor: '#000',
   },
   loadingContainer: {
     flex: 1,
@@ -225,18 +336,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     padding: 12,
-    zIndex: 2,
+    zIndex: 10,
   },
   bottomSection: {
-    marginBottom: 40,
+    marginBottom: 6,
     position: 'absolute',
-    bottom: '10%',
+    bottom: '13%',
     left: 16,
     width: '75%',
     zIndex: 5,
   },
   businessInfoContainer: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   campaignName: {
     color: 'white',
@@ -254,6 +365,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '300',
     letterSpacing: 0.3,
+    maxWidth: '90%',
   },
   checkmark: {
     marginLeft: 4,
@@ -265,7 +377,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   descriptionContainer: {
-    marginBottom: 18,
+    marginBottom: 20,
   },
   campaignDescription: {
     color: 'white',

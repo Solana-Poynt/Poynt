@@ -236,7 +236,6 @@ export const processQueue = createAsyncThunk(
           const requestIds = new Set(requests.map((r) => r.id));
           sortedRequests.filter((r) => !requestIds.has(r.id));
         } catch (error) {
-          console.error(error);
           // Leave these in the sorted list to be processed individually
         }
       }
@@ -632,9 +631,7 @@ const apiQueueSlice = createSlice({
 
           state.lastSyncTimestamp = Date.now();
           state.isSyncing = false;
-        } catch (error) {
-          console.error(error);
-        }
+        } catch (error) {}
       })
       .addCase(processQueue.rejected, (state, action) => {
         state.isSyncing = false;

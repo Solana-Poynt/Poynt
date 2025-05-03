@@ -10,6 +10,7 @@ export default function BottomNav() {
   const [navItems, setNavItems] = useState<any>([]);
   const isHomeScreen = pathname === '/screens/home';
   const walletScreen = pathname === '/screens/wallet';
+  // const [videoScreen, setVideoScreen] = useState<boolean>(true);
 
   // Fetch role and set navigation items after the component mounts
   useEffect(() => {
@@ -66,6 +67,12 @@ export default function BottomNav() {
     };
     checkUserAuth();
   }, []);
+
+  // useEffect(() => {
+  //   if (!isHomeScreen) {
+  //     // setVideoScreen(false)
+  //   }
+  // }, []);
 
   return (
     <View style={[styles.navContainer, !isHomeScreen && styles.whiteBackground]}>

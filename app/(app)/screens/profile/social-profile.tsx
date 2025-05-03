@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  ScrollView,
+} from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,23 +31,31 @@ interface AccountData {
 interface NotificationState {
   show: boolean;
   message: string;
-  status: string;
+  status: 'success' | 'error' | '';
 }
 
+/**
+ * Social Profile Screen Component
+ * Allows users to connect their social media accounts, with primary focus on Twitter/X integration
+ */
 const SocialProfileScreen: React.FC = () => {
+  // Twitter auth hook
   const {
     connectTwitter,
     handleAuthCallback,
     disconnectTwitter,
     initialize,
+    resetAuth,
+    debugAuthState,
     loading,
     error,
     isConnected,
     account,
     authFlowActive,
-    isRateLimited,
+    authStatus,
   } = useTwitterAuth();
 
+  // Component state
   const [accounts, setAccounts] = useState<AccountData[]>([
     {
       provider: 'X',
@@ -55,30 +72,81 @@ const SocialProfileScreen: React.FC = () => {
       profileImageUrl: null,
     },
   ]);
+
+  // Notification management
+
   const [notification, setNotification] = useState<NotificationState>({
     show: false,
     message: '',
     status: '',
   });
+
+  // State and refs
   const [isProcessingDeepLink, setIsProcessingDeepLink] = useState(false);
   const [processedUrls, setProcessedUrls] = useState<Set<string>>(new Set());
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitialized = useRef(false);
 
-  const showNotification = useCallback((message: string, status: string, duration = 3000) => {
-    if (notificationTimeoutRef.current) {
-      clearTimeout(notificationTimeoutRef.current);
-    }
+  // Animation values
+  const loadingOpacity = useRef(new Animated.Value(0)).current;
+  const loadingScale = useRef(new Animated.Value(0.8)).current;
 
-    setNotification({ show: true, message, status });
-    console.log('[SocialProfileScreen] Showing notification:', { message, status });
+  /**
+   * Start loading animation
+   */
+  const startLoadingAnimation = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(loadingOpacity, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(loadingScale, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [loadingOpacity, loadingScale]);
 
-    notificationTimeoutRef.current = setTimeout(() => {
-      setNotification({ show: false, message: '', status: '' });
-      notificationTimeoutRef.current = null;
-    }, duration);
-  }, []);
+  /**
+   * End loading animation
+   */
+  const endLoadingAnimation = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(loadingOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(loadingScale, {
+        toValue: 0.8,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [loadingOpacity, loadingScale]);
 
+  /**
+   * Display notification
+   */
+  const showNotification = useCallback(
+    (message: string, status: 'success' | 'error', duration = 3000) => {
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+      }
+
+      setNotification({ show: true, message, status });
+
+      notificationTimeoutRef.current = setTimeout(() => {
+        setNotification({ show: false, message: '', status: '' });
+        notificationTimeoutRef.current = null;
+      }, duration);
+    },
+    []
+  );
+
+  // Clean up notification timeout on unmount
   useEffect(() => {
     return () => {
       if (notificationTimeoutRef.current) {
@@ -91,23 +159,42 @@ const SocialProfileScreen: React.FC = () => {
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      console.log('[SocialProfileScreen] Initializing Twitter auth');
-      initialize().catch((err) => {
-        console.error('[SocialProfileScreen] Init error:', err);
+      initialize().catch(() => {
+        showNotification('Failed to initialize authentication', 'error');
       });
     }
-  }, [initialize]);
+  }, [initialize, showNotification]);
+
+  // Handle auth status changes and notifications
+  useEffect(() => {
+    if (authStatus === 'authenticating') {
+      startLoadingAnimation();
+    } else {
+      endLoadingAnimation();
+
+      if (authStatus === 'success' && isConnected && account) {
+        showNotification(`Connected to ${account.username} successfully!`, 'success');
+      } else if (authStatus === 'error' && error) {
+        // Handle rate limit errors with a more user-friendly message
+        showNotification(
+          error.includes('Rate limit') ? 'Too many attempts. Please try again later.' : error,
+          'error',
+          error.includes('Rate limit') ? 5000 : 3000
+        );
+      }
+    }
+  }, [
+    authStatus,
+    isConnected,
+    account,
+    error,
+    startLoadingAnimation,
+    endLoadingAnimation,
+    showNotification,
+  ]);
 
   // Update accounts state when Twitter connection status changes
   useEffect(() => {
-    console.log('[SocialProfileScreen] Auth state:', {
-      isConnected,
-      account,
-      loading,
-      error,
-      isRateLimited,
-    });
-
     setAccounts((prev) =>
       prev.map((acc) =>
         acc.provider === 'X'
@@ -126,14 +213,15 @@ const SocialProfileScreen: React.FC = () => {
   // Handle deep linking for auth callbacks
   useEffect(() => {
     const handleUrl = async ({ url }: { url: string }) => {
-      console.log('[SocialProfileScreen] Received URL:', url);
-
       if (!url || isProcessingDeepLink || processedUrls.has(url)) {
-        console.log('[SocialProfileScreen] Skipping deep link:', {
-          url,
-          isProcessingDeepLink,
-          processed: processedUrls.has(url),
-        });
+        return;
+      }
+
+      // Always process X auth deep links with the correct format, regardless of authFlowActive state
+      if (url.includes('state=') && url.includes('code=')) {
+        showNotification('Detected X auth callback URL, proceeding with auth', 'success');
+        // Continue processing even if authFlowActive is false, as the state may have been lost
+      } else if (!authFlowActive) {
         return;
       }
 
@@ -141,31 +229,15 @@ const SocialProfileScreen: React.FC = () => {
       setProcessedUrls((prev) => new Set(prev).add(url));
 
       try {
-        console.log('[SocialProfileScreen] Handling deep link:', url);
         const result = await handleAuthCallback(url);
 
         if (result.success) {
-          console.log('[SocialProfileScreen] Deep link auth successful, re-initializing');
           await initialize();
-          showNotification('X account connected successfully!', 'success');
-        } else {
-          showNotification(
-            result.error?.includes('Rate limit')
-              ? 'Rate limit exceeded. Please try again in 1 hour.'
-              : result.error || 'Failed to connect X account',
-            'error',
-            result.error?.includes('Rate limit') ? 5000 : 3000
-          );
+        } else if (result.error) {
+          showNotification(result.error, 'error');
         }
       } catch (err: any) {
-        console.error('[SocialProfileScreen] Deep link error:', err);
-        showNotification(
-          err.message?.includes('Rate limit')
-            ? 'Rate limit exceeded. Please try again in 1 hour.'
-            : err.message || 'Failed to process authentication',
-          'error',
-          err.message?.includes('Rate limit') ? 5000 : 3000
-        );
+        showNotification('Failed to process authentication callback', 'error');
       } finally {
         setIsProcessingDeepLink(false);
       }
@@ -174,34 +246,29 @@ const SocialProfileScreen: React.FC = () => {
     // Listen for incoming links
     const subscription = Linking.addEventListener('url', handleUrl);
 
-    // Check for initial URL that launched the app
+    // Check for initial URL that may have launched the app
     Linking.getInitialURL().then((url) => {
       if (url) handleUrl({ url });
     });
 
     return () => subscription.remove();
-  }, [handleAuthCallback, showNotification, isProcessingDeepLink, processedUrls, initialize]);
+  }, [
+    handleAuthCallback,
+    isProcessingDeepLink,
+    processedUrls,
+    authFlowActive,
+    initialize,
+    showNotification,
+  ]);
 
-  // Show error notifications
-  useEffect(() => {
-    if (error) {
-      showNotification(
-        error.includes('Rate limit') ? 'Rate limit exceeded. Please try again in 1 hour.' : error,
-        'error',
-        error.includes('Rate limit') ? 5000 : 3000
-      );
-    }
-  }, [error, showNotification]);
-
-  // Handle X connect/disconnect
+  /**
+   * Handle X connect/disconnect button press
+   */
   const handleXConnect = useCallback(async () => {
-    if (isRateLimited) {
-      showNotification('Rate limit exceeded. Please try again in 1 hour.', 'error', 5000);
-      return;
-    }
-
     const xAccount = accounts.find((acc) => acc.provider === 'X');
+
     if (xAccount?.connected) {
+      // Disconnect flow
       Alert.alert('Disconnect X', 'Are you sure you want to disconnect your X account?', [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -209,12 +276,13 @@ const SocialProfileScreen: React.FC = () => {
           onPress: async () => {
             try {
               const success = await disconnectTwitter();
-              showNotification(
-                success ? 'X account disconnected successfully!' : 'Failed to disconnect X account',
-                success ? 'success' : 'error'
-              );
+
+              if (success) {
+                showNotification('X account disconnected successfully!', 'success');
+              } else {
+                showNotification('Failed to disconnect X account', 'error');
+              }
             } catch (err) {
-              console.error('[SocialProfileScreen] Disconnect error:', err);
               showNotification('Failed to disconnect X account', 'error');
             }
           },
@@ -222,20 +290,51 @@ const SocialProfileScreen: React.FC = () => {
         },
       ]);
     } else {
+      // Connect flow
       try {
         const result = await connectTwitter();
-        console.log('[SocialProfileScreen] Connect result:', result);
-        if (!result || result.type !== 'success') {
-          // No need for notification here as the Twitter flow is just starting
+
+        if (!result && !authFlowActive) {
+          showNotification('Failed to start X authentication', 'error');
         }
       } catch (err) {
-        console.error('[SocialProfileScreen] Connect error:', err);
-        showNotification('Authentication failed', 'error');
+        showNotification('Failed to connect X account', 'error');
       }
     }
-  }, [accounts, connectTwitter, disconnectTwitter, showNotification, isRateLimited]);
+  }, [accounts, connectTwitter, disconnectTwitter, showNotification, authFlowActive]);
 
-  // Generate accounts list
+  /**
+   * Reset auth state (dev-only in production)
+   */
+  const handleResetAuth = useCallback(async () => {
+    Alert.alert('Reset X Authentication', 'This will clear all X authentication data. Continue?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        onPress: async () => {
+          try {
+            await resetAuth();
+            showNotification('X authentication reset successfully', 'success');
+          } catch (err) {
+            showNotification('Failed to reset X authentication', 'error');
+          }
+        },
+        style: 'destructive',
+      },
+    ]);
+  }, [resetAuth, showNotification]);
+
+  /**
+   * Debug auth state (dev-only)
+   */
+  const handleDebugAuth = useCallback(async () => {
+    await debugAuthState();
+    showNotification('Auth debug info logged to console', 'success');
+  }, [debugAuthState, showNotification]);
+
+  /**
+   * Generate accounts list UI
+   */
   const accountsList = useMemo(
     () =>
       accounts.map((account, index) => (
@@ -265,36 +364,45 @@ const SocialProfileScreen: React.FC = () => {
               </Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={[
-              styles.connectButton,
-              account.connected ? styles.disconnectButton : styles.connectButtonActive,
-              (account.provider !== 'X' || isRateLimited) && !account.connected
-                ? styles.disabledButton
-                : {},
-            ]}
-            onPress={account.provider === 'X' ? handleXConnect : undefined}
-            disabled={
-              account.provider !== 'X' ||
-              loading ||
-              isProcessingDeepLink ||
-              (isRateLimited && !account.connected)
-            }>
-            {(loading || isProcessingDeepLink) && account.provider === 'X' ? (
+
+          {account.provider === 'X' && authStatus === 'authenticating' ? (
+            <Animated.View
+              style={[
+                styles.loadingContainer,
+                {
+                  opacity: loadingOpacity,
+                  transform: [{ scale: loadingScale }],
+                },
+              ]}>
               <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.connectButtonText}>
-                {account.connected
-                  ? 'Disconnect'
-                  : isRateLimited && account.provider === 'X'
-                    ? 'Try Again Later'
-                    : 'Connect'}
-              </Text>
-            )}
-          </TouchableOpacity>
+              <Text style={styles.loadingText}>Connecting...</Text>
+            </Animated.View>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.connectButton,
+                account.connected ? styles.disconnectButton : styles.connectButtonActive,
+                account.provider !== 'X' ? styles.disabledButton : {},
+              ]}
+              onPress={account.provider === 'X' ? handleXConnect : undefined}
+              disabled={
+                account.provider !== 'X' ||
+                loading ||
+                isProcessingDeepLink ||
+                authStatus === 'authenticating'
+              }>
+              {loading && account.provider === 'X' && authStatus !== 'authenticating' ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.connectButtonText}>
+                  {account.connected ? 'Disconnect' : 'Connect'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )),
-    [accounts, handleXConnect, loading, isProcessingDeepLink, isRateLimited]
+    [accounts, handleXConnect, loading, authStatus, loadingOpacity, loadingScale]
   );
 
   return (
@@ -309,25 +417,38 @@ const SocialProfileScreen: React.FC = () => {
         }}
       />
       <SafeAreaView style={styles.container}>
-        <Text style={styles.headerText}>
-          Connect your social media accounts to participate in tasks and earn Poynts.
-        </Text>
-        <View style={styles.accountsList}>{accountsList}</View>
-        {isRateLimited && (
-          <Text style={styles.rateLimitText}>Rate limit exceeded. Please try again in 1 hour.</Text>
-        )}
-        <View style={styles.infoBox}>
-          <Ionicons
-            name="information-circle-outline"
-            size={22}
-            color="#666"
-            style={styles.infoIcon}
-          />
-          <Text style={styles.infoText}>
-            We only use your social accounts to verify task completion. We do not post on your
-            behalf without your explicit permission.
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <Text style={styles.headerText}>
+            Connect your social media accounts to participate in tasks and earn Poynts.
           </Text>
-        </View>
+
+          <View style={styles.accountsList}>{accountsList}</View>
+
+          <View style={styles.infoBox}>
+            <Ionicons
+              name="information-circle-outline"
+              size={22}
+              color="#666"
+              style={styles.infoIcon}
+            />
+            <Text style={styles.infoText}>
+              We only use your social accounts to verify task completion. We do not post on your
+              behalf without your explicit permission.
+            </Text>
+          </View>
+
+          {/* {__DEV__ && (
+            <View style={styles.debugButtons}>
+              <TouchableOpacity style={styles.debugButton} onPress={handleDebugAuth}>
+                <Text style={styles.debugButtonText}>Debug Auth</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.resetButton} onPress={handleResetAuth}>
+                <Text style={styles.resetButtonText}>Reset Auth</Text>
+              </TouchableOpacity>
+            </View>
+          )} */}
+        </ScrollView>
+
         {notification.show && (
           <Notification
             status={notification.status}
@@ -350,11 +471,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    padding: 16,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   headerText: {
     fontSize: 16,
     color: '#666',
+    marginHorizontal: 16,
+    marginTop: 16,
     marginBottom: 24,
     lineHeight: 24,
   },
@@ -362,12 +487,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F7',
     borderRadius: 12,
     overflow: 'hidden',
+    marginHorizontal: 16,
     marginBottom: 24,
-    elevation: 1,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
   },
   accountItem: {
     flexDirection: 'row',
@@ -452,6 +578,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F7',
     borderRadius: 12,
     padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 24,
     flexDirection: 'row',
     alignItems: 'flex-start',
     elevation: 1,
@@ -470,11 +598,55 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
   },
-  rateLimitText: {
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1DA1F2',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    minWidth: 110,
+    justifyContent: 'center',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+  },
+  loadingText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    color: '#B71C1C',
-    textAlign: 'center',
-    marginBottom: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  debugButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
+    gap: 16,
+  },
+  debugButton: {
+    padding: 10,
+    backgroundColor: '#666',
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  resetButton: {
+    padding: 10,
+    backgroundColor: '#B71C1C',
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  debugButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  resetButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });
 

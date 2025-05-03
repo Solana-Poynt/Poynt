@@ -8,7 +8,7 @@ import { Provider } from 'react-redux';
 import { store, persistor } from '../store/store';
 
 import { initNetworkListener } from '../store/slices/isNetworkSlice';
-import { dynamicClient } from '~/components/context/wallet';
+// import { dynamicClient } from '~/components/context/wallet';
 import NetworkStatusBanner from '~/components/Network';
 import TopLoadingModal from '~/components/Loader';
 
@@ -45,7 +45,7 @@ export default function Layout() {
       <PersistGate loading={<TopLoadingModal message="Preparing app..." />} persistor={persistor}>
         <View style={{ flex: 1 }}>
           {/* WebView needs to be in a persistent parent component */}
-          <dynamicClient.reactNative.WebView />
+          {/* <dynamicClient.reactNative.WebView /> */}
 
           <GestureHandlerRootView style={{ flex: 1 }}>
             {/* Network status indicator that shows connection state */}

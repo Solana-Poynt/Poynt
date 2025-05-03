@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useSharedValue,  withTiming } from 'react-native-reanimated';
 import { useSelector } from 'react-redux';
 import { selectSyncErrors } from '~/store/slices/isApiQueueSlice';
 
@@ -124,9 +124,9 @@ const styles = StyleSheet.create({
   sideActionsContainer: {
     position: 'absolute',
     right: 10,
-    bottom: 210,
+    bottom: 140,
     alignItems: 'center',
-    zIndex: 4,
+    zIndex: 0,
   },
   sideActionButton: {
     alignItems: 'center',

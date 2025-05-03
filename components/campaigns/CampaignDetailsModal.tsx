@@ -17,6 +17,13 @@ import Video from 'react-native-video';
 import { Adtype, Campaign } from '~/store/api/api';
 import { useCampaignActions, useCampaignInteractions } from '~/hooks/useCampaignActions';
 import { getDataFromAsyncStorage } from '~/utils/localStorage';
+import Notification from '~/components/Notification';
+
+interface NotificationState {
+  show: boolean;
+  message: string;
+  status: 'success' | 'error' | '';
+}
 
 const { height } = Dimensions.get('window');
 
@@ -42,6 +49,30 @@ const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
     ? useCampaignInteractions(campaign.id)
     : { isParticipated: false, isPendingParticipation: false };
 
+  const [notification, setNotification] = useState<NotificationState>({
+    show: false,
+    message: '',
+    status: '',
+  });
+
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showNotification = useCallback(
+    (message: string, status: 'success' | 'error', duration = 3000) => {
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+      }
+
+      setNotification({ show: true, message, status });
+
+      notificationTimeoutRef.current = setTimeout(() => {
+        setNotification({ show: false, message: '', status: '' });
+        notificationTimeoutRef.current = null;
+      }, duration);
+    },
+    []
+  );
+
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
       if (visible && !isAnimating) {
@@ -59,7 +90,8 @@ const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
         const id = await getDataFromAsyncStorage('id');
         setUserId(id);
       } catch (error) {
-        console.error(error);
+        showNotification('Failed to process', 'error');
+        // console.error(error);
       }
     };
     fetchUserId();
@@ -115,7 +147,7 @@ const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
           source={{ uri: campaign.mediaUrl }}
           style={styles.detailsThumbnail}
           resizeMode="cover"
-          onError={(error) => console.error(error)}
+          onError={(error) => showNotification('Failed to process ', 'error')}
         />
       );
     }
@@ -129,7 +161,7 @@ const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
           muted
           ignoreSilentSwitch="ignore"
           playInBackground={false}
-          onError={(error) => console.error(error)}
+          onError={(error) => showNotification('Failed to process', 'error')}
           onLoad={() => setIsVideoPaused(false)}
         />
       );
@@ -204,6 +236,20 @@ const CampaignDetailsModal: React.FC<CampaignDetailsModalProps> = ({
           </View>
         </Animated.View>
       </View>
+
+      {notification.show && (
+        <Notification
+          status={notification.status}
+          message={notification.message}
+          switchShowOff={() => {
+            setNotification({ show: false, message: '', status: '' });
+            if (notificationTimeoutRef.current) {
+              clearTimeout(notificationTimeoutRef.current);
+              notificationTimeoutRef.current = null;
+            }
+          }}
+        />
+      )}
     </Modal>
   );
 };

@@ -54,6 +54,10 @@ interface AddEngagementRequest {
   campaignId: string;
 }
 
+interface AddTasksDoneRequest {
+  campaignId: string;
+}
+
 interface AddEngagementResponse {
   message: string;
   status: number;
@@ -82,6 +86,12 @@ interface CampaignResponse {
   data: Campaign[];
   message: string;
   status: number;
+}
+
+interface ViewCampaignResponse {
+  message: string;
+  status: number;
+  data?: any;
 }
 
 export enum Adtype {
@@ -258,16 +268,14 @@ export const api = createApi({
       }),
       invalidatesTags: ['Campaign'],
     }),
-    addTasksDone: builder.mutation<AddTasksDoneResponse, { campaignId: string; taskIds: number[] }>(
-      {
-        query: ({ campaignId, taskIds }) => ({
-          url: `user/addTasksDone`,
-          method: 'PATCH',
-          body: { campaignId, taskIds },
-        }),
-        invalidatesTags: ['Campaign'],
-      }
-    ),
+    addTasksDone: builder.mutation<AddTasksDoneResponse, AddTasksDoneRequest>({
+      query: ({ campaignId }) => ({
+        url: `user/addTasksDone`,
+        method: 'PATCH',
+        body: { campaignId },
+      }),
+      invalidatesTags: ['Campaign'],
+    }),
     sendData: builder.mutation<SendDataResponse, SendDataArgs>({
       query: ({ url, data, type }) => ({
         url,
@@ -275,6 +283,13 @@ export const api = createApi({
         body: data,
       }),
       invalidatesTags: ['User'],
+    }),
+    viewCampaign: builder.mutation<ViewCampaignResponse, { viewerId: string; campaignId: string }>({
+      query: ({ viewerId, campaignId }) => ({
+        url: `campaign:campaign/view/${viewerId}/${campaignId}`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: ['Campaign'],
     }),
   }),
 });
@@ -284,5 +299,8 @@ export const {
   useGetDisplayCampaignsQuery,
   useGetLeaderboardQuery,
   useFundPoyntMutation,
+  useAddEngagementMutation,
+  useAddTasksDoneMutation,
   useSendDataMutation,
+  useViewCampaignMutation,
 } = api;
