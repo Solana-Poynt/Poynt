@@ -1,17 +1,25 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 
-import { Container } from '~/components/Container';
-import { ScreenContent } from '~/components/ScreenContent';
+import ComingSoon from '~/components/coming';
 
-export default function Details() {
+const Details = () => {
   const { name } = useLocalSearchParams();
-
   return (
-    <>
-      <Stack.Screen options={{ title: 'Details' }} />
-      <Container>
-        <ScreenContent path="screens/details.tsx" title={`Showing details for user ${name}`} />
-      </Container>
-    </>
+    <View style={styles.container}>
+      <Stack.Screen options={{ title: 'Contribute', headerShown: false }} />
+      <ComingSoon />
+    </View>
   );
-}
+};
+
+export default Details;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

@@ -1,20 +1,37 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
+import { mapTaskType } from '../TaskFormatter';
 import * as Crypto from 'expo-crypto';
 import { Buffer } from 'buffer';
 
+// Configuration constants
 const TWITTER_CLIENT_ID = 'bk42enJZLWg2dUxNRTB1N0FpNms6MTpjaQ';
-
-// 2. Add a validation check
-if (!TWITTER_CLIENT_ID) {
-  console.error('[useTwitterAuth] Missing TWITTER_CLIENT_ID environment variable');
-}
 const TOKEN_ENDPOINT = 'https://api.x.com/2/oauth2/token';
 const AUTH_ENDPOINT = 'https://x.com/i/oauth2/authorize';
 const USERS_ENDPOINT = 'https://api.x.com/2/users/me';
+const FOLLOWS_ENDPOINT = 'https://api.x.com/2/users';
 const REDIRECT_URI = 'poynt://screens/profile/social-profile';
+const REQUEST_TIMEOUT = 20000;
 
+// Add global flag for auth in progress that survives navigation
+declare global {
+  interface Window {
+    authInProgress?: boolean;
+  }
+}
+
+// Storage keys
+const STORAGE_KEYS = {
+  ACCESS_TOKEN: 'x_access_token',
+  REFRESH_TOKEN: 'x_refresh_token',
+  TOKEN_EXPIRY: 'x_token_expiry',
+  ACCOUNT: 'x_account',
+  AUTH_VERIFIER: 'x_auth_verifier',
+  AUTH_STATE: 'x_auth_state',
+} as const;
+
+// OAuth scopes
 const SCOPES = [
   'users.read',
   'tweet.read',
@@ -24,48 +41,161 @@ const SCOPES = [
   'like.read',
   'like.write',
   'offline.access',
-];
+] as const;
 
-const REQUEST_TIMEOUT = 10000;
-const RATE_LIMIT_COOLDOWN = 60 * 60 * 1000; // 1 hour
+// Types
+type AuthStatus = 'idle' | 'authenticating' | 'success' | 'error';
 
-type TaskType = 'follow' | 'like' | 'retweet' | 'comment' | 'tweet';
-type VerificationResult = { completed: boolean; error?: string };
-type Account = { username: string; userId: string; profileImageUrl: string | null } | null;
+interface Account {
+  username: string;
+  userId: string;
+  profileImageUrl: string | null;
+}
 
+interface UserInfo {
+  id: string;
+  username: string;
+  name: string;
+  profile_image_url?: string;
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+}
+
+interface AuthCallbackResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Hook for Twitter/X authentication
+ */
 const useTwitterAuth = () => {
+  // State management
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [account, setAccount] = useState<Account>(null);
-  const [authFlowActive, setAuthFlowActive] = useState(false);
-  const [isRateLimited, setIsRateLimited] = useState(false);
+  const [account, setAccount] = useState<Account | null>(null);
+  const [authFlowActive, setAuthFlowActive] = useState(!!window.authInProgress);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(
+    window.authInProgress ? 'authenticating' : 'idle'
+  );
 
-  const isInitialized = useRef(false);
+  // Refs for managing side effects
   const timeoutRef = useRef<NodeJS.Timeout[]>([]);
-  const rateLimitResetRef = useRef<number | null>(null);
   const lastConnectAttempt = useRef<number>(0);
+  const codeVerifierRef = useRef<string | null>(null);
+  const initInProgress = useRef<boolean>(false);
 
+  // Restore auth flow state if needed
   useEffect(() => {
+    if (window.authInProgress && !authFlowActive) {
+      setAuthFlowActive(true);
+      setAuthStatus('authenticating');
+    }
+
     return () => {
       timeoutRef.current.forEach((id) => clearTimeout(id));
     };
   }, []);
 
+  // Logging functions
+  const logInfo = useCallback((message: string, data?: any) => {
+    if (__DEV__) {
+      if (data) {
+        console.log(`[TwitterAuth] ${message}`, data);
+      } else {
+        console.log(`[TwitterAuth] ${message}`);
+      }
+    }
+  }, []);
+
+  const logError = useCallback((message: string, error?: any) => {
+    if (__DEV__) console.error(`[TwitterAuth] ${message}`, error || '');
+  }, []);
+
+  /**
+   * Clears all Twitter-related data from storage
+   */
+  const clearAllTwitterStorage = useCallback(async (): Promise<void> => {
+    try {
+      const keys = Object.values(STORAGE_KEYS);
+      await AsyncStorage.multiRemove(keys);
+    } catch (err) {
+      logError('Failed to clear Twitter storage', err);
+    }
+  }, [logError]);
+
+  /**
+   * Validates stored auth data
+   */
+  const validateStoredData = useCallback(async (): Promise<boolean> => {
+    try {
+      const [accessToken, refreshToken, tokenExpiry, accountData] = await AsyncStorage.multiGet([
+        STORAGE_KEYS.ACCESS_TOKEN,
+        STORAGE_KEYS.REFRESH_TOKEN,
+        STORAGE_KEYS.TOKEN_EXPIRY,
+        STORAGE_KEYS.ACCOUNT,
+      ]);
+
+      // Check if all required data exists
+      if (!accessToken[1] || !refreshToken[1] || !tokenExpiry[1] || !accountData[1]) {
+        await clearAllTwitterStorage();
+        return false;
+      }
+
+      // Check token expiry
+      const expiryTime = parseInt(tokenExpiry[1], 10);
+      if (isNaN(expiryTime) || expiryTime < Date.now()) {
+        await clearAllTwitterStorage();
+        return false;
+      }
+
+      // Validate account data format
+      try {
+        JSON.parse(accountData[1]);
+      } catch {
+        await clearAllTwitterStorage();
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      logError('Failed to validate stored data', err);
+      await clearAllTwitterStorage();
+      return false;
+    }
+  }, [clearAllTwitterStorage, logError]);
+
+  /**
+   * URL-safe Base64 encoding
+   */
   const URLEncode = useCallback((str: string): string => {
     return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   }, []);
 
+  /**
+   * Generates a code verifier for PKCE
+   */
   const generateCodeVerifier = useCallback(async (): Promise<string> => {
     try {
       const randomBytes = await Crypto.getRandomBytesAsync(32);
       return URLEncode(Buffer.from(randomBytes).toString('base64'));
     } catch (err) {
-      if (__DEV__) console.error('[useTwitterAuth] Error generating code verifier:', err);
+      logError('Error generating code verifier', err);
       throw new Error('Failed to generate code verifier');
     }
-  }, [URLEncode]);
+  }, [URLEncode, logError]);
 
+  /**
+   * Generates a code challenge from a verifier
+   */
   const generateCodeChallenge = useCallback(
     async (verifier: string): Promise<string> => {
       try {
@@ -76,50 +206,51 @@ const useTwitterAuth = () => {
         );
         return URLEncode(digest);
       } catch (err) {
-        if (__DEV__) console.error('[useTwitterAuth] Error generating code challenge:', err);
+        logError('Error generating code challenge', err);
         throw new Error('Failed to generate code challenge');
       }
     },
-    [URLEncode]
+    [URLEncode, logError]
   );
 
-  const clearVerifierData = useCallback(async (): Promise<void> => {
-    try {
-      await AsyncStorage.multiRemove(['x_code_verifier', 'x_code_challenge', 'x_auth_state']);
-      if (__DEV__) console.log('[useTwitterAuth] Cleared verifier data');
-    } catch (err) {
-      if (__DEV__) console.error('[useTwitterAuth] Failed to clear verifier data:', err);
-    }
-  }, []);
-
+  /**
+   * Saves auth tokens to storage
+   */
   const saveTokens = useCallback(
     async (accessToken: string, refreshToken: string, expiresIn: number): Promise<void> => {
       try {
         const expiry = Date.now() + expiresIn * 1000;
         await AsyncStorage.multiSet([
-          ['x_access_token', accessToken],
-          ['x_refresh_token', refreshToken || ''],
-          ['x_token_expiry', expiry.toString()],
+          [STORAGE_KEYS.ACCESS_TOKEN, accessToken],
+          [STORAGE_KEYS.REFRESH_TOKEN, refreshToken],
+          [STORAGE_KEYS.TOKEN_EXPIRY, expiry.toString()],
         ]);
-        if (__DEV__)
-          console.log('[useTwitterAuth] Tokens saved, expiry:', new Date(expiry).toISOString());
       } catch (err) {
-        if (__DEV__) console.error('[useTwitterAuth] Failed to save tokens:', err);
+        logError('Failed to save tokens', err);
         throw new Error('Failed to save tokens');
       }
     },
-    []
+    [logError]
   );
 
+  /**
+   * Clears auth tokens from storage
+   */
   const clearTokens = useCallback(async (): Promise<void> => {
     try {
-      await AsyncStorage.multiRemove(['x_access_token', 'x_refresh_token', 'x_token_expiry']);
-      if (__DEV__) console.log('[useTwitterAuth] Tokens cleared');
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.ACCESS_TOKEN,
+        STORAGE_KEYS.REFRESH_TOKEN,
+        STORAGE_KEYS.TOKEN_EXPIRY,
+      ]);
     } catch (err) {
-      if (__DEV__) console.error('[useTwitterAuth] Failed to clear tokens:', err);
+      logError('Failed to clear tokens', err);
     }
-  }, []);
+  }, [logError]);
 
+  /**
+   * Creates a timeout that is tracked for cleanup
+   */
   const safeTimeout = useCallback((callback: () => void, ms: number): NodeJS.Timeout => {
     const id = setTimeout(() => {
       callback();
@@ -129,12 +260,14 @@ const useTwitterAuth = () => {
     return id;
   }, []);
 
+  /**
+   * Refreshes an access token using a refresh token
+   */
   const refreshAccessToken = useCallback(
     async (refreshToken: string): Promise<string | null> => {
-      let timeoutId: NodeJS.Timeout | null = null;
       try {
         return await new Promise((resolve, reject) => {
-          timeoutId = safeTimeout(() => {
+          const timeoutId = safeTimeout(() => {
             reject(new Error('Refresh token request timed out'));
           }, REQUEST_TIMEOUT);
 
@@ -147,92 +280,85 @@ const useTwitterAuth = () => {
               client_id: TWITTER_CLIENT_ID,
             }).toString(),
           })
-            .then((response) => {
-              if (__DEV__)
-                console.log('[useTwitterAuth] Refresh token response status:', response.status);
-              return response.json();
-            })
-            .then(async (data) => {
-              if (timeoutId) clearTimeout(timeoutId);
+            .then(async (response) => {
+              clearTimeout(timeoutId);
+
+              if (!response.ok) {
+                await clearTokens();
+                resolve(null);
+                return;
+              }
+
+              const data: TokenResponse = await response.json();
+
               if (data.access_token) {
                 await saveTokens(
                   data.access_token,
                   data.refresh_token || refreshToken,
                   data.expires_in || 7200
                 );
-                if (__DEV__) console.log('[useTwitterAuth] Refresh token successful');
                 resolve(data.access_token);
               } else {
-                if (__DEV__) console.error('[useTwitterAuth] Refresh token failed:', data);
                 await clearTokens();
                 resolve(null);
               }
             })
             .catch(async (err) => {
-              if (__DEV__) console.error('[useTwitterAuth] Refresh token error:', err);
+              clearTimeout(timeoutId);
               await clearTokens();
+              logError('Refresh token error', err);
               resolve(null);
             });
         });
       } catch (err) {
-        if (timeoutId) clearTimeout(timeoutId);
-        if (__DEV__) console.error('[useTwitterAuth] Refresh token error:', err);
+        logError('Unexpected refresh token error', err);
         await clearTokens();
         return null;
       }
     },
-    [saveTokens, clearTokens, safeTimeout]
+    [saveTokens, clearTokens, safeTimeout, logError]
   );
 
+  /**
+   * Gets a valid access token (refreshes if needed)
+   */
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     try {
       const [accessToken, refreshToken, expiry] = await AsyncStorage.multiGet([
-        'x_access_token',
-        'x_refresh_token',
-        'x_token_expiry',
+        STORAGE_KEYS.ACCESS_TOKEN,
+        STORAGE_KEYS.REFRESH_TOKEN,
+        STORAGE_KEYS.TOKEN_EXPIRY,
       ]);
 
       const token = accessToken[1];
       const refresh = refreshToken[1];
       const expiryTime = expiry[1] ? parseInt(expiry[1], 10) : null;
 
-      if (__DEV__)
-        console.log('[useTwitterAuth] Access token check:', { token: !!token, expiryTime });
-
       if (!token) return null;
 
+      // Refresh if token expires in less than 5 minutes
       if (expiryTime && expiryTime - Date.now() < 5 * 60 * 1000 && refresh) {
-        if (__DEV__) console.log('[useTwitterAuth] Token nearing expiry, attempting refresh');
         return await refreshAccessToken(refresh);
       }
 
       return token;
     } catch (err) {
-      if (__DEV__) console.error('[useTwitterAuth] Failed to get access token:', err);
+      logError('Failed to get access token', err);
       return null;
     }
-  }, [refreshAccessToken]);
+  }, [refreshAccessToken, logError]);
 
+  /**
+   * Fetches user info from Twitter API
+   */
   const getUserInfo = useCallback(
-    async (
-      token: string,
-      retries = 5,
-      baseRetryDelay = 2000
-    ): Promise<{ id: string; username: string; profile_image_url?: string } | null> => {
-      if (rateLimitResetRef.current && Date.now() < rateLimitResetRef.current) {
-        const waitTime = rateLimitResetRef.current - Date.now();
-        if (__DEV__)
-          console.log(`[useTwitterAuth] Rate limit active, waiting ${waitTime}ms until reset`);
-        setIsRateLimited(true);
-        return null; // Skip retries
-      }
-
+    async (token: string, retries = 3, baseRetryDelay = 1000): Promise<UserInfo | null> => {
       for (let attempt = 1; attempt <= retries; attempt++) {
-        let timeoutId: NodeJS.Timeout | null = null;
         try {
           const url = `${USERS_ENDPOINT}?user.fields=id,name,username,profile_image_url`;
-          const responsePromise = new Promise<Response>((resolve, reject) => {
-            timeoutId = safeTimeout(() => {
+
+          const response = await new Promise<Response>((resolve, reject) => {
+            const timeoutId = safeTimeout(() => {
               reject(new Error('User info request timed out'));
             }, REQUEST_TIMEOUT);
 
@@ -243,217 +369,340 @@ const useTwitterAuth = () => {
                 'Content-Type': 'application/json',
               },
             })
-              .then(resolve)
+              .then((res) => {
+                clearTimeout(timeoutId);
+                resolve(res);
+              })
               .catch(reject);
           });
 
-          const response = await responsePromise;
-          if (timeoutId) clearTimeout(timeoutId);
+          if (!response.ok) {
+            const responseText = await response.text();
 
-          if (__DEV__) {
-            console.log('[useTwitterAuth] User info response status:', response.status);
-            console.log(
-              '[useTwitterAuth] Rate limit remaining:',
-              response.headers.get('x-rate-limit-remaining')
-            );
-            console.log(
-              '[useTwitterAuth] Rate limit reset:',
-              response.headers.get('x-rate-limit-reset')
-            );
-          }
-
-          if (response.status === 429) {
-            const retryAfter = response.headers.get('x-rate-limit-reset');
-            const resetTime = retryAfter
-              ? parseInt(retryAfter, 10) * 1000
-              : Date.now() + 15 * 60 * 1000;
-            rateLimitResetRef.current = resetTime;
-            setIsRateLimited(true);
-            if (__DEV__) console.log('[useTwitterAuth] Rate limit hit, notifying user');
-            return null; // Skip retries
-          }
-
-          if (response.status === 401) {
-            const refreshToken = await AsyncStorage.getItem('x_refresh_token');
-            if (refreshToken) {
-              if (__DEV__) console.log('[useTwitterAuth] 401 error, attempting token refresh');
-              const newToken = await refreshAccessToken(refreshToken);
-              if (newToken && attempt < retries) {
-                token = newToken; // Update token for next attempt
-                continue;
+            // Handle unauthorized error by refreshing token
+            if (response.status === 401 && attempt < retries) {
+              const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+              if (refreshToken) {
+                const newToken = await refreshAccessToken(refreshToken);
+                if (newToken) {
+                  token = newToken;
+                  continue;
+                }
               }
             }
-            throw new Error('Twitter API error: 401 - Unauthorized');
+
+            throw new Error(`Twitter API error: ${response.status}`);
           }
 
-          const responseText = await response.text();
-          let data;
-          try {
-            data = JSON.parse(responseText);
-          } catch {
-            throw new Error('Invalid response format from Twitter API');
-          }
-
-          if (!response.ok) {
-            const errorMsg = data.errors?.[0]?.message || data.detail || 'Unknown error';
-            throw new Error(`Twitter API error: ${response.status} - ${errorMsg}`);
-          }
+          const data = await response.json();
 
           if (!data.data) {
             throw new Error('No user data in response');
           }
 
-          rateLimitResetRef.current = null;
-          setIsRateLimited(false);
-          return data.data;
+          return data.data as UserInfo;
         } catch (err: any) {
-          if (timeoutId) clearTimeout(timeoutId);
-          if (__DEV__)
-            console.error(
-              `[useTwitterAuth] Failed to get user info (attempt ${attempt}/${retries}):`,
-              err
-            );
-          if (attempt === retries) {
-            return null; // Preserve tokens
-          }
+          logError(`Failed to get user info (attempt ${attempt}/${retries})`, err);
+
+          if (attempt === retries) return null;
+
+          // Exponential backoff with jitter
+          const jitter = Math.random() * 0.3 + 0.85; // 0.85-1.15 range for jitter
+          const delay = Math.floor(baseRetryDelay * Math.pow(2, attempt - 1) * jitter);
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
       return null;
     },
-    [safeTimeout, refreshAccessToken]
+    [safeTimeout, refreshAccessToken, logError]
   );
 
+  /**
+   * Lookup Twitter user by username
+   */
+  const getUserByUsername = useCallback(
+    async (username: string, token: string): Promise<{ id: string; username: string } | null> => {
+      try {
+        // Remove @ if present
+        const cleanUsername = username.replace(/^@/, '');
+        const url = `${FOLLOWS_ENDPOINT}/by/username/${cleanUsername}?user.fields=id,username`;
+
+        logInfo(`Looking up user by username: ${cleanUsername}`);
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          logError(`User lookup failed: ${response.status}`, await response.text());
+          return null;
+        }
+
+        const data = await response.json();
+
+        if (!data.data) {
+          logError('No data in user lookup response');
+          return null;
+        }
+
+        return {
+          id: data.data.id,
+          username: data.data.username,
+        };
+      } catch (error) {
+        logError('Error looking up user', error);
+        return null;
+      }
+    },
+    [logInfo, logError]
+  );
+
+  /**
+   * Check if current user follows a target user
+   */
+  const checkFollowingById = useCallback(
+    async (sourceId: string, targetId: string, token: string): Promise<boolean> => {
+      try {
+        const url = `${FOLLOWS_ENDPOINT}/${sourceId}/following?user.fields=id&max_results=1000`;
+
+        logInfo(`Checking if ${sourceId} follows ${targetId}`);
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          logError(`Follow check failed: ${response.status}`, await response.text());
+          return false;
+        }
+
+        const data = await response.json();
+
+        if (!data.data || !Array.isArray(data.data)) {
+          logError('Invalid response format for following check');
+          return false;
+        }
+
+        // Check if targetId is in the following list
+        return data.data.some((user: any) => user.id === targetId);
+      } catch (error) {
+        logError('Error checking follow status', error);
+        return false;
+      }
+    },
+    [logInfo, logError]
+  );
+
+  /**
+   * Saves code verifier to AsyncStorage to persist across redirects
+   */
+  const saveAuthData = useCallback(
+    async (verifier: string, state: string): Promise<void> => {
+      try {
+        await AsyncStorage.multiSet([
+          [STORAGE_KEYS.AUTH_VERIFIER, verifier],
+          [STORAGE_KEYS.AUTH_STATE, state],
+        ]);
+      } catch (err) {
+        logError('Failed to save auth data', err);
+      }
+    },
+    [logError]
+  );
+
+  /**
+   * Loads code verifier from AsyncStorage
+   */
+  const loadAuthData = useCallback(async (): Promise<{
+    verifier: string | null;
+    state: string | null;
+  }> => {
+    try {
+      const [verifier, state] = await AsyncStorage.multiGet([
+        STORAGE_KEYS.AUTH_VERIFIER,
+        STORAGE_KEYS.AUTH_STATE,
+      ]);
+      return {
+        verifier: verifier[1],
+        state: state[1],
+      };
+    } catch (err) {
+      logError('Failed to load auth data', err);
+      return { verifier: null, state: null };
+    }
+  }, [logError]);
+
+  /**
+   * Initializes the auth state
+   */
   const initialize = useCallback(async () => {
-    if (loading || isInitialized.current) return;
-    isInitialized.current = true;
+    if (loading || initInProgress.current) return;
+
+    initInProgress.current = true;
     setLoading(true);
 
     try {
-      if (__DEV__) console.log('[useTwitterAuth] Initializing auth state');
-      const [xAccount, accessToken, tokenExpiry] = await AsyncStorage.multiGet([
-        'x_account',
-        'x_access_token',
-        'x_token_expiry',
-      ]);
-
-      if (__DEV__)
-        console.log('[useTwitterAuth] AsyncStorage values:', {
-          xAccount: !!xAccount[1],
-          accessToken: !!accessToken[1],
-          tokenExpiry: tokenExpiry[1],
-        });
-
-      if (!xAccount[1] || !accessToken[1] || !tokenExpiry[1]) {
-        if (__DEV__) console.log('[useTwitterAuth] No valid tokens, clearing');
-        await clearTokens();
+      const isValid = await validateStoredData();
+      if (!isValid) {
         setIsConnected(false);
         setAccount(null);
+        setAuthStatus('idle');
+        return;
+      }
+
+      const [xAccount, accessToken, tokenExpiry] = await AsyncStorage.multiGet([
+        STORAGE_KEYS.ACCOUNT,
+        STORAGE_KEYS.ACCESS_TOKEN,
+        STORAGE_KEYS.TOKEN_EXPIRY,
+      ]);
+
+      if (!xAccount[1] || !accessToken[1] || !tokenExpiry[1]) {
+        await clearAllTwitterStorage();
+        setIsConnected(false);
+        setAccount(null);
+        setAuthStatus('idle');
         return;
       }
 
       const expiryTime = parseInt(tokenExpiry[1], 10);
-      if (__DEV__)
-        console.log('[useTwitterAuth] Token expiry:', new Date(expiryTime).toISOString());
-
       if (expiryTime < Date.now()) {
-        const refreshToken = await AsyncStorage.getItem('x_refresh_token');
-        if (__DEV__) console.log('[useTwitterAuth] Token expired, refreshToken:', !!refreshToken);
+        const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
         if (refreshToken) {
           const newToken = await refreshAccessToken(refreshToken);
           if (!newToken) {
-            if (__DEV__) console.log('[useTwitterAuth] Refresh failed, clearing tokens');
-            await clearTokens();
+            await clearAllTwitterStorage();
             setIsConnected(false);
             setAccount(null);
+            setAuthStatus('idle');
             return;
           }
         } else {
-          if (__DEV__) console.log('[useTwitterAuth] No refresh token, clearing');
-          await clearTokens();
+          await clearAllTwitterStorage();
           setIsConnected(false);
           setAccount(null);
+          setAuthStatus('idle');
           return;
         }
       }
 
-      try {
-        const userInfo = await getUserInfo(accessToken[1]);
-        if (!userInfo) {
-          if (__DEV__) console.log('[useTwitterAuth] Failed to get user info, preserving tokens');
-          return; // Preserve tokens
-        }
+      const token = await getAccessToken();
+      if (!token) {
+        await clearAllTwitterStorage();
+        setIsConnected(false);
+        setAccount(null);
+        setAuthStatus('idle');
+        return;
+      }
 
-        const parsedAccount = JSON.parse(xAccount[1]);
+      const userInfo = await getUserInfo(token);
+      if (!userInfo) {
+        await clearAllTwitterStorage();
+        setIsConnected(false);
+        setAccount(null);
+        setAuthStatus('error');
+        setError('Failed to verify account information');
+        return;
+      }
+
+      try {
+        const parsedAccount: Account = JSON.parse(xAccount[1]);
         if (parsedAccount.userId !== userInfo.id) {
-          if (__DEV__) console.log('[useTwitterAuth] User ID mismatch, clearing tokens');
-          await clearTokens();
+          await clearAllTwitterStorage();
           setIsConnected(false);
           setAccount(null);
+          setAuthStatus('idle');
           return;
         }
 
-        const accountData = {
+        // Update profile image URL if it has changed
+        if (parsedAccount.profileImageUrl !== userInfo.profile_image_url) {
+          parsedAccount.profileImageUrl = userInfo.profile_image_url || null;
+          await AsyncStorage.setItem(STORAGE_KEYS.ACCOUNT, JSON.stringify(parsedAccount));
+        }
+
+        const accountData: Account = {
           username: parsedAccount.username,
           userId: parsedAccount.userId,
           profileImageUrl: parsedAccount.profileImageUrl,
         };
-        if (__DEV__) console.log('[useTwitterAuth] Setting account:', accountData);
+
         setAccount(accountData);
         setIsConnected(true);
+        setAuthStatus('success');
       } catch (err) {
-        if (__DEV__) console.error('[useTwitterAuth] Token validation failed:', err);
-        return; // Preserve tokens
+        logError('Error parsing account data', err);
+        await clearAllTwitterStorage();
+        setIsConnected(false);
+        setAccount(null);
+        setAuthStatus('error');
+        setError('Invalid account data');
       }
     } catch (err) {
-      if (__DEV__) console.error('[useTwitterAuth] Initialize error:', err);
-      return; // Preserve tokens
+      logError('Initialize error', err);
+      await clearAllTwitterStorage();
+      setIsConnected(false);
+      setAccount(null);
+      setAuthStatus('error');
+      setError('Authentication initialization failed');
     } finally {
       setLoading(false);
-      if (__DEV__) console.log('[useTwitterAuth] Initialize complete:', { isConnected, account });
+      initInProgress.current = false;
     }
-  }, [loading, getUserInfo, clearTokens, refreshAccessToken]);
+  }, [
+    loading,
+    getUserInfo,
+    clearTokens,
+    refreshAccessToken,
+    getAccessToken,
+    clearAllTwitterStorage,
+    validateStoredData,
+    logError,
+  ]);
 
+  /**
+   * Initiates the Twitter authentication flow
+   */
   const connectTwitter = useCallback(async () => {
-    const now = Date.now();
-    if (now - lastConnectAttempt.current < 5000) {
-      if (__DEV__) console.log('[useTwitterAuth] Connect attempt throttled');
+    // Prevent rapid re-attempts
+    if (loading || Date.now() - lastConnectAttempt.current < 5000) {
       return null;
     }
-    lastConnectAttempt.current = now;
 
-    if (authFlowActive || loading || isRateLimited) {
-      if (__DEV__)
-        console.log('[useTwitterAuth] Connect blocked:', {
-          authFlowActive,
-          loading,
-          isRateLimited,
-        });
-      return null;
-    }
+    // Clear previous auth data
+    codeVerifierRef.current = null;
+
+    lastConnectAttempt.current = Date.now();
     setLoading(true);
     setError(null);
+    setAuthStatus('authenticating');
     setAuthFlowActive(true);
 
+    // Save for persistence across potential app state changes
+    window.authInProgress = true;
+
     try {
-      if (__DEV__) console.log('[useTwitterAuth] Starting Twitter connect');
-      await clearVerifierData();
+      await clearAllTwitterStorage();
+
+      // Generate PKCE challenge
       const verifier = await generateCodeVerifier();
       const challenge = await generateCodeChallenge(verifier);
       const state = Crypto.randomUUID().replace(/-/g, '');
 
-      if (__DEV__)
-        console.log('[useTwitterAuth] Generated:', {
-          verifier: verifier.substring(0, 10) + '...',
-          challenge: challenge.substring(0, 10) + '...',
-          state,
-        });
+      // Store in memory
+      codeVerifierRef.current = verifier;
 
-      await AsyncStorage.multiSet([
-        ['x_code_verifier', verifier],
-        ['x_code_challenge', challenge],
-        ['x_auth_state', state],
-      ]);
+      // Also store in AsyncStorage for persistence across redirects
+      await saveAuthData(verifier, state);
 
+      // Build authorization URL
       const authUrl = new URL(AUTH_ENDPOINT);
       authUrl.searchParams.append('response_type', 'code');
       authUrl.searchParams.append('client_id', TWITTER_CLIENT_ID);
@@ -463,438 +712,506 @@ const useTwitterAuth = () => {
       authUrl.searchParams.append('code_challenge', challenge);
       authUrl.searchParams.append('code_challenge_method', 'S256');
 
-      if (__DEV__) console.log('[useTwitterAuth] Auth URL:', authUrl.toString());
-
       const result = await WebBrowser.openAuthSessionAsync(authUrl.toString(), REDIRECT_URI);
-      if (__DEV__) console.log('[useTwitterAuth] WebBrowser result:', result);
 
       if (result.type !== 'success' || !result.url) {
+        setAuthStatus('error');
+        setError(result.type === 'cancel' ? 'Authentication cancelled' : 'Authentication failed');
+        await clearAllTwitterStorage();
+        await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_VERIFIER, STORAGE_KEYS.AUTH_STATE]);
+        codeVerifierRef.current = null;
+        window.authInProgress = false;
         throw new Error('Authentication cancelled or failed');
       }
 
       return result;
     } catch (err: any) {
-      if (__DEV__) console.error('[useTwitterAuth] Connect error:', err);
+      logError('Connect error', err);
       setError(err.message || 'Failed to start authentication');
+      setAuthStatus('error');
       setAuthFlowActive(false);
+      await clearAllTwitterStorage();
+      codeVerifierRef.current = null;
+      window.authInProgress = false;
       return null;
     } finally {
       setLoading(false);
     }
   }, [
-    authFlowActive,
     loading,
-    isRateLimited,
     generateCodeVerifier,
     generateCodeChallenge,
-    clearVerifierData,
+    clearAllTwitterStorage,
+    saveAuthData,
+    logError,
   ]);
 
+  /**
+   * Handles the callback from the Twitter auth flow
+   */
   const handleAuthCallback = useCallback(
-    async (url: string) => {
-      if (loading) return { success: false, error: 'Authentication in progress' };
+    async (url: string): Promise<AuthCallbackResult> => {
       setLoading(true);
       setError(null);
 
       try {
-        if (__DEV__) console.log('[useTwitterAuth] Handling callback URL:', url);
         const parsedUrl = new URL(url);
         const code = parsedUrl.searchParams.get('code');
         const authError = parsedUrl.searchParams.get('error');
         const errorDescription = parsedUrl.searchParams.get('error_description');
         const state = parsedUrl.searchParams.get('state');
 
-        if (__DEV__)
-          console.log('[useTwitterAuth] Parsed URL:', {
-            code: !!code,
-            state,
-            authError,
-            errorDescription,
-          });
-
+        // Handle error response
         if (authError) {
-          throw new Error(errorDescription || 'Authentication failed');
+          const errorMsg = errorDescription || 'Authentication failed';
+          setAuthStatus('error');
+          setError(errorMsg);
+          await clearAllTwitterStorage();
+          codeVerifierRef.current = null;
+          window.authInProgress = false;
+          return { success: false, error: errorMsg };
         }
 
+        // Validate code presence
         if (!code) {
-          throw new Error('No authorization code provided');
+          const errorMsg = 'No authorization code provided';
+          setAuthStatus('error');
+          setError(errorMsg);
+          await clearAllTwitterStorage();
+          codeVerifierRef.current = null;
+          window.authInProgress = false;
+          return { success: false, error: errorMsg };
         }
 
-        const storedState = await AsyncStorage.getItem('x_auth_state');
-        if (!storedState || state !== storedState) {
-          throw new Error('Invalid state parameter');
+        // Validate state parameter
+        if (!state) {
+          const errorMsg = 'Missing state parameter';
+          setAuthStatus('error');
+          setError(errorMsg);
+          await clearAllTwitterStorage();
+          codeVerifierRef.current = null;
+          window.authInProgress = false;
+          return { success: false, error: errorMsg };
         }
 
-        const verifier = await AsyncStorage.getItem('x_code_verifier');
+        // Load verifier and state from storage if not in memory
+        let verifier = codeVerifierRef.current;
         if (!verifier) {
-          throw new Error('Missing code verifier');
+          const storedAuth = await loadAuthData();
+
+          if (storedAuth.verifier) {
+            verifier = storedAuth.verifier;
+            codeVerifierRef.current = storedAuth.verifier;
+          } else {
+            const errorMsg = 'Missing code verifier';
+            setAuthStatus('error');
+            setError(errorMsg);
+            await clearAllTwitterStorage();
+            await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_VERIFIER, STORAGE_KEYS.AUTH_STATE]);
+            window.authInProgress = false;
+            return { success: false, error: errorMsg };
+          }
         }
 
-        if (__DEV__)
-          console.log('[useTwitterAuth] Token exchange params:', {
-            code: code.substring(0, 10) + '...',
-            redirect_uri: REDIRECT_URI,
-            verifier: verifier.substring(0, 10) + '...',
-          });
-
-        let timeoutId: NodeJS.Timeout | null = null;
-        const responsePromise = new Promise<Response>((resolve, reject) => {
-          timeoutId = safeTimeout(() => {
+        // Exchange code for token
+        const response = await new Promise<Response>((resolve, reject) => {
+          const timeoutId = safeTimeout(() => {
             reject(new Error('Token exchange request timed out'));
           }, REQUEST_TIMEOUT);
-
-          const params = {
-            code,
-            grant_type: 'authorization_code',
-            client_id: TWITTER_CLIENT_ID,
-            redirect_uri: REDIRECT_URI,
-            code_verifier: verifier,
-          };
-
-          if (__DEV__) console.log('[useTwitterAuth] Token exchange full params:', params);
 
           fetch(TOKEN_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams(params).toString(),
+            body: new URLSearchParams({
+              code,
+              grant_type: 'authorization_code',
+              client_id: TWITTER_CLIENT_ID,
+              redirect_uri: REDIRECT_URI,
+              code_verifier: verifier as string,
+            }).toString(),
           })
-            .then(resolve)
+            .then((res) => {
+              clearTimeout(timeoutId);
+              resolve(res);
+            })
             .catch(reject);
         });
 
-        const response = await responsePromise;
-        if (timeoutId) clearTimeout(timeoutId);
-
-        if (__DEV__) console.log('[useTwitterAuth] Token exchange status:', response.status);
-
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          throw new Error(`Invalid token response: ${responseText}`);
-        }
-
-        if (__DEV__) console.log('[useTwitterAuth] Token exchange response:', data);
+        // Handle token response
+        const data: TokenResponse = await response.json();
 
         if (!response.ok || !data.access_token) {
-          if (__DEV__) console.error('[useTwitterAuth] Token exchange failed:', data);
-          throw new Error(
-            `Token exchange failed: ${data.error_description || JSON.stringify(data)}`
-          );
+          const errorMsg = `Token exchange failed: ${data.error_description || response.status}`;
+          setAuthStatus('error');
+          setError(errorMsg);
+          await clearAllTwitterStorage();
+          codeVerifierRef.current = null;
+          return { success: false, error: errorMsg };
         }
 
+        // Save tokens
         await saveTokens(data.access_token, data.refresh_token || '', data.expires_in || 7200);
+
+        // Fetch user info
         const userInfo = await getUserInfo(data.access_token);
         if (!userInfo) {
-          if (__DEV__) console.log('[useTwitterAuth] Failed to get user info, preserving tokens');
-          setError(
-            isRateLimited
-              ? 'Rate limit exceeded. Please try again in 1 hour.'
-              : 'Failed to retrieve user info'
-          );
-          return {
-            success: false,
-            error: isRateLimited
-              ? 'Rate limit exceeded. Please try again in 1 hour.'
-              : 'Failed to retrieve user info',
-          };
+          await clearAllTwitterStorage();
+          const errorMsg = 'Failed to retrieve user info';
+          setError(errorMsg);
+          setAuthStatus('error');
+          codeVerifierRef.current = null;
+          return { success: false, error: errorMsg };
         }
 
-        const xAccount = {
+        // Create account object
+        const xAccount: Account = {
           username: `@${userInfo.username}`,
           userId: userInfo.id,
           profileImageUrl: userInfo.profile_image_url || null,
         };
 
-        await AsyncStorage.setItem('x_account', JSON.stringify(xAccount));
-        if (__DEV__) console.log('[useTwitterAuth] Saved account:', xAccount);
-
-        const storedAccount = await AsyncStorage.getItem('x_account');
-        const storedToken = await AsyncStorage.getItem('x_access_token');
-        if (__DEV__)
-          console.log('[useTwitterAuth] Post-save AsyncStorage check:', {
-            storedAccount: !!storedAccount,
-            storedToken: !!storedToken,
-          });
-
+        // Save account info
+        await AsyncStorage.setItem(STORAGE_KEYS.ACCOUNT, JSON.stringify(xAccount));
         setAccount(xAccount);
         setIsConnected(true);
-        await clearVerifierData();
+        setAuthStatus('success');
 
-        if (__DEV__) console.log('[useTwitterAuth] Auth callback successful');
+        // Clean up auth data
+        await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_VERIFIER, STORAGE_KEYS.AUTH_STATE]);
+        codeVerifierRef.current = null;
+
         return { success: true };
       } catch (err: any) {
-        if (__DEV__) console.error('[useTwitterAuth] Auth callback error:', err);
-        setError(
-          err.message.includes('Rate limit')
-            ? 'Rate limit exceeded. Please try again in 1 hour.'
-            : err.message || 'Failed to connect X account'
-        );
+        logError('Auth callback error', err);
+        const errorMsg = err.message || 'Failed to connect X account';
+        setError(errorMsg);
+        await clearAllTwitterStorage();
         setIsConnected(false);
         setAccount(null);
-        return { success: false, error: err.message || 'Unknown error' };
+        setAuthStatus('error');
+        codeVerifierRef.current = null;
+        return { success: false, error: errorMsg };
       } finally {
         setLoading(false);
         setAuthFlowActive(false);
+        // Clear global auth in progress flag
+        window.authInProgress = false;
       }
     },
-    [loading, isRateLimited, getUserInfo, saveTokens, clearVerifierData, safeTimeout]
+    [getUserInfo, saveTokens, safeTimeout, clearAllTwitterStorage, loadAuthData, logError]
   );
 
-  const disconnectTwitter = useCallback(async () => {
+  /**
+   * Disconnects the Twitter account
+   */
+  const disconnectTwitter = useCallback(async (): Promise<boolean> => {
     if (loading) return false;
+
     setLoading(true);
     setError(null);
 
     try {
-      await AsyncStorage.multiRemove([
-        'x_account',
-        'x_access_token',
-        'x_refresh_token',
-        'x_token_expiry',
-        'x_code_verifier',
-        'x_code_challenge',
-        'x_auth_state',
-      ]);
+      await clearAllTwitterStorage();
       setAccount(null);
       setIsConnected(false);
       setAuthFlowActive(false);
-      setIsRateLimited(false);
-      if (__DEV__) console.log('[useTwitterAuth] Disconnected successfully');
+      setAuthStatus('idle');
+      codeVerifierRef.current = null;
       return true;
     } catch (err) {
-      if (__DEV__) console.error('[useTwitterAuth] Disconnect error:', err);
+      logError('Disconnect error', err);
       setError('Failed to disconnect');
       return false;
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  }, [loading, clearAllTwitterStorage, logError]);
 
-  const extractTarget = useCallback(
-    (url: string, taskType: TaskType): { target: string; targetType: 'user' | 'tweet' } | null => {
-      try {
-        const cleanUrl = url.replace(/^(follow|retweet|comment|like|tweet)\s*:/i, '').trim();
-        const parsedUrl = new URL(cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`);
-        if (taskType === 'follow') {
-          const username = parsedUrl.pathname.split('/')[1];
-          if (!username) throw new Error('No username in URL');
-          return { target: username, targetType: 'user' };
-        } else if (['like', 'retweet', 'comment'].includes(taskType)) {
-          const tweetId = parsedUrl.pathname.split('/')[3];
-          if (!tweetId) throw new Error('No tweet ID in URL');
-          return { target: tweetId, targetType: 'tweet' };
-        } else if (taskType === 'tweet') {
-          const hashtag = cleanUrl.match(/#[\w]+/)?.[0] || cleanUrl;
-          return { target: hashtag, targetType: 'tweet' };
+  /**
+   * Resets the auth state
+   */
+  const resetAuth = useCallback(async (): Promise<void> => {
+    try {
+      await clearAllTwitterStorage();
+      setAccount(null);
+      setIsConnected(false);
+      setAuthFlowActive(false);
+      setAuthStatus('idle');
+      setError(null);
+      codeVerifierRef.current = null;
+    } catch (err) {
+      logError('Reset auth error', err);
+    }
+  }, [clearAllTwitterStorage, logError]);
+
+  /**
+   * Provides debug information about the current auth state
+   * Only used in development mode
+   */
+  const debugAuthState = useCallback(async (): Promise<boolean> => {
+    if (!__DEV__) return false;
+
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const twitterKeys = allKeys.filter((key) => key.startsWith('x_'));
+      const keyValues = await AsyncStorage.multiGet(twitterKeys);
+      const state: Record<string, any> = {};
+
+      keyValues.forEach(([key, value]) => {
+        if (key === STORAGE_KEYS.ACCESS_TOKEN && value) {
+          state[key] = value.substring(0, 10) + '...';
+        } else if (key === STORAGE_KEYS.REFRESH_TOKEN && value) {
+          state[key] = value.substring(0, 10) + '...';
+        } else if (key === STORAGE_KEYS.TOKEN_EXPIRY && value) {
+          const timestamp = parseInt(value, 10);
+          state[key] = new Date(timestamp).toISOString();
+          state[key + '_remaining'] = Math.round((timestamp - Date.now()) / 1000) + 's';
+        } else if (key === STORAGE_KEYS.ACCOUNT && value) {
+          try {
+            state[key] = JSON.parse(value);
+          } catch {
+            state[key] = value;
+          }
+        } else {
+          state[key] = value;
         }
-        return null;
-      } catch (err) {
-        if (__DEV__)
-          console.error('[useTwitterAuth] Extract target error:', err, { url, taskType });
-        return null;
+      });
+
+      // Include in-memory state
+      state['in_memory_state'] = {
+        loading,
+        error,
+        isConnected,
+        authStatus,
+        authFlowActive,
+      };
+
+      state['in_memory_code_verifier'] = codeVerifierRef.current
+        ? codeVerifierRef.current.substring(0, 10) + '...'
+        : null;
+
+      console.log('[TwitterAuth] DEBUG AUTH STATE', state);
+      return true;
+    } catch (err) {
+      logError('Debug error', err);
+      return false;
+    }
+  }, [loading, error, isConnected, authStatus, authFlowActive, logError]);
+
+  /**
+   * Extract username from Twitter URL
+   */
+  const extractUsernameFromUrl = useCallback((url: string): string | null => {
+    try {
+      const cleanUrl = url.trim();
+      const urlObj = new URL(cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`);
+
+      if (urlObj.hostname === 'x.com' || urlObj.hostname === 'twitter.com') {
+        // Format: twitter.com/username or twitter.com/username/status/123
+        const pathParts = urlObj.pathname.split('/').filter(Boolean);
+        if (pathParts.length > 0) {
+          return pathParts[0].toLowerCase();
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /**
+   * Check if a proof URL references the original tweet
+   */
+  // const isRelatedToOriginalTweet = useCallback((proofUrl: string, originalUrl: string): boolean => {
+  //   try {
+  //     // Extract status ID from original URL (if it has one)
+  //     const originalUrlObj = new URL(
+  //       originalUrl.startsWith('http') ? originalUrl : `https://${originalUrl}`
+  //     );
+  //     const originalPathParts = originalUrlObj.pathname.split('/').filter(Boolean);
+  //     let originalStatusId = null;
+
+  //     if (originalPathParts.length >= 3 && originalPathParts[1] === 'status') {
+  //       originalStatusId = originalPathParts[2];
+  //     }
+
+  //     // If original URL doesn't have a status ID, we can't verify relation
+  //     if (!originalStatusId) return true;
+
+  //     // Check if proof URL contains the original status ID
+  //     return proofUrl.includes(originalStatusId);
+  //   } catch {
+  //     return false;
+  //   }
+  // }, []);
+
+  /**
+   * Check if a user follows another user using the Twitter API
+   */
+  const checkFollowStatus = useCallback(
+    async (targetUsername: string): Promise<boolean> => {
+      try {
+        // Get account data and access token
+        const accountData = await AsyncStorage.getItem(STORAGE_KEYS.ACCOUNT);
+        if (!accountData) return false;
+
+        const token = await getAccessToken();
+        if (!token) return false;
+
+        // REAL IMPLEMENTATION FOR PAID TIER API
+        // // 1. First get the target user's ID by username
+        // const targetUser = await getUserByUsername(targetUsername, token);
+        // if (!targetUser) {
+        //   logError(`Could not find user with username: ${targetUsername}`);
+        //   return false;
+        // }
+        // 2. Check if the authenticated user follows the target user
+        // const isFollowing = await checkFollowingById(account.userId, targetUser.id, token);
+        // logInfo(
+        //   `Follow check result: ${account.username} following ${targetUser.username}: ${isFollowing}`
+        // );
+        // return isFollowing;
+        // FREE TIER IMPLEMENTATION - MOCK VERSION
+        // logInfo(`[Mock] Checking if ${account.username} follows ${targetUsername}`);
+        // Always return true since we can't check with free tier
+        return true;
+      } catch (error) {
+        logError('Failed to check follow status', error);
+        return false;
       }
     },
-    []
+    [getAccessToken, getUserByUsername, checkFollowingById, logInfo, logError]
   );
 
+  /**
+   * Verify a Twitter task
+   */
   const verifyTask = useCallback(
-    async (taskType: TaskType, url: string): Promise<VerificationResult> => {
-      if (loading) return { completed: false, error: 'Verification in progress' };
-      if (isRateLimited)
-        return { completed: false, error: 'Rate limit exceeded. Please try again in 1 hour.' };
-      setLoading(true);
-      setError(null);
-
+    async (taskType: string, taskUrl: string, proofUrl?: string) => {
       try {
-        const token = await getAccessToken();
-        if (!token) {
-          setError('Twitter account not connected');
+        setLoading(true);
+
+        const normalizedTaskType = ['social', 'interaction', 'custom'].includes(taskType)
+          ? mapTaskType(taskType, taskUrl)
+          : taskType;
+
+        // Get user's Twitter account info
+        const accountData = await AsyncStorage.getItem(STORAGE_KEYS.ACCOUNT);
+        if (!accountData) {
           return { completed: false, error: 'Twitter account not connected' };
         }
 
-        const xAccount = await AsyncStorage.getItem('x_account');
-        if (!xAccount) {
-          setError('Twitter account data missing');
-          return { completed: false, error: 'Twitter account data missing' };
-        }
-        const { userId } = JSON.parse(xAccount);
+        const account = JSON.parse(accountData);
+        const username = account.username.replace('@', '');
 
-        const targetInfo = extractTarget(url, taskType);
-        if (!targetInfo) {
-          setError('Invalid task URL');
+        // Normalize task URL
+        const normalizedTaskUrl = taskUrl.trim();
+        if (!normalizedTaskUrl) {
           return { completed: false, error: 'Invalid task URL' };
         }
-        const { target, targetType } = targetInfo;
 
-        let endpoint = '';
-        let checkFn: (data: any) => Promise<boolean> | boolean;
-        switch (taskType) {
-          case 'follow':
-            endpoint = `https://api.x.com/2/users/${userId}/following`;
-            checkFn = async (data) => {
-              const userResponse = await fetch(`https://api.x.com/2/users/by/username/${target}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              const userData = await userResponse.json();
-              if (!userData.data?.id) return false;
-              return data.data?.some((user: any) => user.id === userData.data.id) || false;
+        // Handle verification based on normalized task type
+        switch (normalizedTaskType) {
+          case 'follow': {
+            const targetUsername = extractUsernameFromUrl(normalizedTaskUrl);
+            if (!targetUsername) {
+              return { completed: false, error: 'Invalid account URL' };
+            }
+
+            const isFollowing = await checkFollowStatus(targetUsername);
+            return {
+              completed: isFollowing,
+              error: isFollowing ? null : `You're not following @${targetUsername}`,
             };
-            break;
+          }
+
           case 'like':
-            endpoint = `https://api.x.com/2/users/${userId}/liked_tweets`;
-            checkFn = (data) => data.data?.some((tweet: any) => tweet.id === target) || false;
-            break;
-          case 'retweet':
-            endpoint = `https://api.x.com/2/users/${userId}/tweets?tweet.fields=referenced_tweets`;
-            checkFn = (data) =>
-              data.data?.some((tweet: any) =>
-                tweet.referenced_tweets?.some(
-                  (ref: any) => ref.type === 'retweeted' && ref.id === target
-                )
-              ) || false;
-            break;
+            // For likes, we'll just trust the user completed the task with free tier
+            return { completed: true };
+
           case 'comment':
-            endpoint = `https://api.x.com/2/users/${userId}/tweets?expansions=referenced_tweets.id`;
-            checkFn = (data) =>
-              data.data?.some((tweet: any) =>
-                tweet.referenced_tweets?.some(
-                  (ref: any) => ref.type === 'quoted' && ref.id === target
-                )
-              ) || false;
-            break;
-          case 'tweet':
-            endpoint = `https://api.x.com/2/users/${userId}/tweets`;
-            checkFn = (data) =>
-              data.data?.some((tweet: any) =>
-                tweet.text.toLowerCase().includes(target.toLowerCase())
-              ) || false;
-            break;
-          default:
-            throw new Error('Invalid task type');
-        }
+          case 'retweet': {
+            // If no proof provided, request it
+            if (!proofUrl) {
+              return {
+                completed: false,
+                error: `Please provide a link to your ${normalizedTaskType}`,
+                requiresProof: true,
+              };
+            }
 
-        let timeoutId: NodeJS.Timeout | null = null;
-        const responsePromise = new Promise<Response>((resolve, reject) => {
-          timeoutId = safeTimeout(() => {
-            reject(new Error('Verification request timed out'));
-          }, REQUEST_TIMEOUT);
+            // Normalize proof URL
+            let normalizedProofUrl = proofUrl.trim();
+            if (!normalizedProofUrl.startsWith('http')) {
+              normalizedProofUrl = `https://${normalizedProofUrl}`;
+            }
 
-          fetch(endpoint, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          })
-            .then(resolve)
-            .catch(reject);
-        });
+            // Verify proof contains user's username
+            const containsUsername = normalizedProofUrl
+              .toLowerCase()
+              .includes(username.toLowerCase());
 
-        const response = await responsePromise;
-        if (timeoutId) clearTimeout(timeoutId);
+            // Check if it references the original tweet
+            // const isRelated = isRelatedToOriginalTweet(normalizedProofUrl, normalizedTaskUrl);
 
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          throw new Error('Invalid response format from Twitter API');
-        }
-
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('x-rate-limit-reset');
-          const resetTime = retryAfter
-            ? parseInt(retryAfter, 10) * 1000
-            : Date.now() + 15 * 60 * 1000;
-          rateLimitResetRef.current = resetTime;
-          setIsRateLimited(true);
-          if (__DEV__) console.log('[useTwitterAuth] Rate limit hit, notifying user');
-          return { completed: false, error: 'Rate limit exceeded. Please try again in 1 hour.' };
-        }
-
-        if (response.status === 401) {
-          const refresh = await AsyncStorage.getItem('x_refresh_token');
-          if (refresh) {
-            const newToken = await refreshAccessToken(refresh);
-            if (newToken) {
-              return verifyTask(taskType, url);
+            if (containsUsername) {
+              return { completed: true };
+            } else if (!containsUsername) {
+              return {
+                completed: false,
+                error: `The link doesn't appear to be from your account (@${username}). Please provide your own ${normalizedTaskType} link.`,
+              };
+            } else {
+              return {
+                completed: false,
+                error: `The proof doesn't seem to be related to the required tweet. Please ${normalizedTaskType} the correct post.`,
+              };
             }
           }
-          setError('Authentication failed. Please reconnect your X account.');
-          return { completed: false, error: 'Authentication failed' };
-        }
 
-        if (response.status === 403) {
-          const errorMsg =
-            data.errors?.[0]?.message ||
-            data.detail ||
-            'Access to this task is restricted. Please check your account permissions or reconnect your account.';
-          setError(errorMsg);
-          return { completed: false, error: errorMsg };
+          default:
+            return { completed: false, error: `Unknown task type: ${normalizedTaskType}` };
         }
-
-        if (!response.ok) {
-          const errorMsg = data.errors?.[0]?.message || data.detail || 'Unknown error';
-          throw new Error(`API error: ${response.status} - ${errorMsg}`);
-        }
-
-        const completed = await checkFn(data);
-        setIsRateLimited(false);
-        return { completed, error: completed ? undefined : 'Task not completed' };
-      } catch (err: any) {
-        if (__DEV__) console.error('[useTwitterAuth] Verify task error:', err);
-        setError(
-          err.message.includes('Rate limit')
-            ? 'Rate limit exceeded. Please try again in 1 hour.'
-            : err.message || 'Verification failed'
-        );
-        return { completed: false, error: err.message || 'Verification failed' };
+      } catch (error) {
+        logError('Task verification error', error);
+        return { completed: false, error: 'Verification failed. Please try again.' };
       } finally {
         setLoading(false);
       }
     },
-    [loading, isRateLimited, getAccessToken, extractTarget, refreshAccessToken, safeTimeout]
+    [extractUsernameFromUrl, checkFollowStatus, logError]
   );
-
-  // Reset rate limit after cooldown period
-  useEffect(() => {
-    if (isRateLimited && rateLimitResetRef.current) {
-      const timeout = setTimeout(() => {
-        setIsRateLimited(false);
-        rateLimitResetRef.current = null;
-        if (__DEV__) console.log('[useTwitterAuth] Rate limit cooldown expired');
-      }, RATE_LIMIT_COOLDOWN);
-      return () => clearTimeout(timeout);
-    }
-  }, [isRateLimited]);
 
   return useMemo(
     () => ({
       connectTwitter,
       handleAuthCallback,
       disconnectTwitter,
-      verifyTask,
       initialize,
+      resetAuth,
+      debugAuthState,
+      verifyTask,
       loading,
       error,
       isConnected,
       account,
       authFlowActive,
-      isRateLimited,
+      authStatus,
     }),
     [
       connectTwitter,
       handleAuthCallback,
       disconnectTwitter,
-      verifyTask,
       initialize,
+      resetAuth,
+      debugAuthState,
+      verifyTask,
       loading,
       error,
       isConnected,
       account,
       authFlowActive,
-      isRateLimited,
+      authStatus,
     ]
   );
 };

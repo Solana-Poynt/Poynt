@@ -40,7 +40,6 @@ export const checkAuthStatus = () => async (dispatch: any) => {
       dispatch(logOut()); // Ensure state is cleared if no tokens
     }
   } catch (error) {
-    console.error('[isAuthSlice] Error checking auth status:', error);
     dispatch(logOut());
   }
 };
@@ -48,7 +47,6 @@ export const checkAuthStatus = () => async (dispatch: any) => {
 // Async action creator for logging out
 export const logOutAsync = () => async (dispatch: any) => {
   try {
-    console.log('[isAuthSlice] Logging out');
     await AsyncStorage.multiRemove([
       'accessToken',
       'refreshToken',
@@ -64,11 +62,9 @@ export const logOutAsync = () => async (dispatch: any) => {
       'x_code_verifier',
       'x_code_challenge',
     ]);
-    console.log('[isAuthSlice] AsyncStorage cleared');
+
     dispatch(logOut());
-  } catch (error) {
-    console.error('[isAuthSlice] Error during logout:', error);
-  }
+  } catch (error) {}
 };
 
 // Auth slice
@@ -90,6 +86,14 @@ export const isAuthSlice = createSlice({
       state.isAuth = false;
       state.accessToken = null;
       state.refreshToken = null;
+
+      // clear all from async storage
+      deleteDataFromAsyncStorage('accessToken');
+      deleteDataFromAsyncStorage('refressToken');
+      deleteDataFromAsyncStorage('id');
+      deleteDataFromAsyncStorage('userTaskProgress');
+      deleteDataFromAsyncStorage('campaignScrollPosition');
+      deleteDataFromAsyncStorage('');
     },
   },
 });

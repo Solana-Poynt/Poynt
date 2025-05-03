@@ -9,17 +9,14 @@ import { Text, ActivityIndicator, Image } from 'react-native';
 // Move static data outside component
 const onboardData = [
   {
-    image: require('../assets/onboard.png'),
     desc: 'Watch Ads, Earn Rewards, Pay Less',
     isSelected: true,
   },
   {
-    image: require('../assets/onboard.png'),
     desc: 'Happy Business, Happy User',
     isSelected: false,
   },
   {
-    image: require('../assets/onboard.png'),
     desc: 'Contribute, interact, and earn Poynts',
     isSelected: false,
   },
@@ -28,7 +25,6 @@ const onboardData = [
 const { width } = Dimensions.get('window');
 
 interface OnboardItem {
-  image: any;
   desc: string;
   isSelected: boolean;
 }
@@ -39,7 +35,9 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const router = useRouter();
-  const flatListRef = useRef<FlatListType<OnboardItem>>(null); 
+  const flatListRef = useRef<FlatListType<OnboardItem>>(null);
+
+  const imgSource = require('../assets/onboard.png');
 
   // Handler functions using useCallback
   const handleLoginFlag = useCallback(async () => {
@@ -47,7 +45,6 @@ export default function Home() {
       await saveDataToAsyncStorage('userHasOnboarded', 'true');
       router.push('/screens/login');
     } catch (error) {
-      console.error('Error saving onboarding status:', error);
       router.push('/screens/login');
     }
   }, [router]);
@@ -65,7 +62,6 @@ export default function Home() {
         setShowOnboarding(true);
       }
     } catch (error) {
-      console.error('🔍 Error in checkUserStatus:', error);
       setShowOnboarding(true);
     } finally {
       setIsLoading(false);
@@ -76,20 +72,13 @@ export default function Home() {
     checkUserStatus();
   }, [checkUserStatus]);
 
-  const renderOnboardingScreen = useCallback(
-    ({ item, index }: { item: OnboardItem; index: number }) => {
-      return (
-        <View style={styles.slideContainer}>
-          <ImageBackground source={item.image} style={styles.backgroundImage} resizeMode="cover">
-            <View style={styles.bottomContentContainer}>
-              <Text style={styles.introText}>{item.desc}</Text>
-            </View>
-          </ImageBackground>
-        </View>
-      );
-    },
-    []
-  );
+  const renderOnboardingText = useCallback(({ item }: { item: OnboardItem }) => {
+    return (
+      <View style={styles.textSlideContainer}>
+        <Text style={styles.introText}>{item.desc}</Text>
+      </View>
+    );
+  }, []);
 
   const handleScroll = useCallback(
     (event: any) => {
@@ -102,7 +91,17 @@ export default function Home() {
     [currentIndex]
   );
 
-  // Render - use conditional rendering AFTER all hooks are defined
+  // Go to specific page
+  const goToPage = useCallback((index: number) => {
+    if (flatListRef.current) {
+      flatListRef.current.scrollToIndex({
+        index,
+        animated: true,
+      });
+      setCurrentIndex(index);
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <View style={styles.splashContainer}>
@@ -128,42 +127,51 @@ export default function Home() {
     <>
       <Stack.Screen options={{ title: 'Onboard', headerShown: false }} />
       <SafeAreaView style={styles.container}>
-        <FlatList
-          ref={flatListRef}
-          data={onboardData}
-          renderItem={renderOnboardingScreen}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={handleScroll}
-          initialScrollIndex={0}
-          keyExtractor={(_, index) => index.toString()}
-          getItemLayout={(_, index) => ({
-            length: width,
-            offset: width * index,
-            index,
-          })}
-        />
-
-        <View style={styles.controlsContainer}>
-          {/* Pagination dots */}
-          <View style={styles.paginationContainer}>
-            {onboardData.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.paginationDot,
-                  index === currentIndex ? styles.paginationDotActive : {},
-                ]}
+        <ImageBackground source={imgSource} style={styles.backgroundImage} resizeMode="cover">
+          <View style={styles.content}>
+            <View style={styles.textContainer}>
+              <FlatList
+                ref={flatListRef}
+                data={onboardData}
+                renderItem={renderOnboardingText}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={handleScroll}
+                initialScrollIndex={0}
+                keyExtractor={(_, index) => index.toString()}
+                getItemLayout={(_, index) => ({
+                  length: width,
+                  offset: width * index,
+                  index,
+                })}
+                decelerationRate="fast"
+                snapToInterval={width}
+                snapToAlignment="center"
               />
-            ))}
-          </View>
+            </View>
 
-          {/* Buttons */}
-          <View style={styles.buttonContainers}>
-            <AppButton title="Join Now" color="Dark" handleClick={handleLoginFlag} />
+            <View style={styles.controlsContainer}>
+              {/* Pagination dots */}
+              <View style={styles.paginationContainer}>
+                {onboardData.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      index === currentIndex ? styles.paginationDotActive : {},
+                    ]}
+                  />
+                ))}
+              </View>
+
+              {/* Buttons */}
+              <View style={styles.buttonContainers}>
+                <AppButton title="Join Now" color="Dark" handleClick={handleLoginFlag} />
+              </View>
+            </View>
           </View>
-        </View>
+        </ImageBackground>
       </SafeAreaView>
     </>
   );
@@ -184,40 +192,43 @@ const styles = StyleSheet.create({
     width: '90%',
     height: '90%',
   },
-  slideContainer: {
+  textSlideContainer: {
     width: width,
-    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backgroundImage: {
     flex: 1,
     width: '100%',
     height: '100%',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
-  bottomContentContainer: {
+  textContainer: {
     width: '100%',
-    height: '33%',
+    height: 150,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    marginBottom: 20,
   },
   introText: {
     fontFamily: 'Inter-VariableFont',
-    width: '100%',
     fontSize: 24,
     fontStyle: 'normal',
-    lineHeight: 32,
+    lineHeight: 38,
     color: '#FDF6E6',
     fontWeight: '600',
-    textAlign: 'center',
+    textAlign: 'left',
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
+    paddingHorizontal: 28,
+    width: width,
   },
   controlsContainer: {
-    position: 'absolute',
-    bottom: 40,
-    left: 0,
-    right: 0,
+    width: '100%',
     paddingHorizontal: 24,
     paddingBottom: 40,
     paddingTop: 20,

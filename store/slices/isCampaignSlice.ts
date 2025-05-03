@@ -127,7 +127,9 @@ export const fetchCampaigns = createAsyncThunk(
       const accessToken = await getDataFromAsyncStorage('accessToken');
       const refreshToken = (await getDataFromAsyncStorage('refreshToken')) || '';
       const email = (await getDataFromAsyncStorage('email')) || '';
-      const userId = (await getDataFromAsyncStorage('userId')) || '';
+      const userId = (await getDataFromAsyncStorage('id')) || '';
+
+      // console.log('USER IDDD:', userId);
 
       const response = await makeApiRequest('campaign/display', {
         headers: {
@@ -168,7 +170,7 @@ export const fetchCampaignById = createAsyncThunk(
       const accessToken = await getDataFromAsyncStorage('accessToken');
       const refreshToken = (await getDataFromAsyncStorage('refreshToken')) || '';
       const email = (await getDataFromAsyncStorage('email')) || '';
-      const userId = (await getDataFromAsyncStorage('userId')) || '';
+      const userId = (await getDataFromAsyncStorage('id')) || '';
 
       const response = await makeApiRequest(`campaign/${id}`, {
         headers: {

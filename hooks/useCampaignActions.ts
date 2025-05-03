@@ -89,7 +89,7 @@ export const useCampaignActions = () => {
 
   const setCurrentCampaign = useCallback(
     (campaignId: string) => {
-      const campaign = campaigns.find(c => c.id === campaignId);
+      const campaign = campaigns.find((c) => c.id === campaignId);
       if (campaign) {
         dispatch(setActiveCampaign(campaign));
       }
@@ -145,7 +145,7 @@ export const useCampaignActions = () => {
         const updatedState = dispatch((_, getState) => getState()) as unknown as RootState;
         const updatedCampaign = selectCampaignById(updatedState, campaignId);
         const updatedInteraction = selectUserInteraction(updatedState, campaignId);
-        console.log('Updated campaign:', updatedCampaign);
+        // console.log('Updated campaign:', updatedCampaign);
         console.log('Updated interaction:', updatedInteraction);
       }, 0);
     },
@@ -200,7 +200,7 @@ export const useCampaignActions = () => {
         const updatedState = dispatch((_, getState) => getState()) as unknown as RootState;
         const updatedCampaign = selectCampaignById(updatedState, campaignId);
         const updatedInteraction = selectUserInteraction(updatedState, campaignId);
-        console.log('Updated campaign:', updatedCampaign);
+        // console.log('Updated campaign:', updatedCampaign);
         console.log('Updated interaction:', updatedInteraction);
       }, 0);
     },
@@ -217,18 +217,24 @@ export const useCampaignActions = () => {
       toggleJoin,
       isConnected,
     }),
-    [getCampaigns, getCampaignById, setCurrentCampaign, isLoading, toggleLike, toggleJoin, isConnected]
+    [
+      getCampaigns,
+      getCampaignById,
+      setCurrentCampaign,
+      isLoading,
+      toggleLike,
+      toggleJoin,
+      isConnected,
+    ]
   );
 };
 
 export const useCampaignInteractions = (campaignId: string) => {
   const dispatch = useDispatch<AppDispatch>();
-  
+
   // Get direct access to the campaign data
-  const campaign = useSelector((state: RootState) => 
-    selectCampaignById(state, campaignId)
-  );
-  
+  const campaign = useSelector((state: RootState) => selectCampaignById(state, campaignId));
+
   const userInteraction = useSelector((state: RootState) =>
     selectUserInteraction(state, campaignId)
   );

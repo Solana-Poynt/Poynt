@@ -22,10 +22,15 @@ import { logOut } from '~/store/slices/isAuthSlice';
 import { AppDispatch } from '~/store/store';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
+import Notification from '~/components/Notification';
+interface NotificationState {
+  show: boolean;
+  message: string;
+  status: 'success' | 'error' | '';
+}
 
 // Shimmer effect for skeleton loading
 const ShimmerEffect = ({ width, height, style }: { width: number; height: number; style: any }) => {
@@ -167,26 +172,35 @@ function ProfileScreen() {
   const [browserUrl, setBrowserUrl] = useState('');
   const dispatch = useDispatch<AppDispatch>();
 
-  // Check if Twitter is connected on component mount
-  useEffect(() => {
-    checkTwitterConnection();
-  }, []);
+  const [notification, setNotification] = useState<NotificationState>({
+    show: false,
+    message: '',
+    status: '',
+  });
 
-  // Check if Twitter account is connected
-  const checkTwitterConnection = async () => {
-    try {
-      const twitterAccountData = await AsyncStorage.getItem('twitter_account');
-      setTwitterConnected(!!twitterAccountData);
-    } catch (error) {
-      console.error('Failed to check Twitter connection:', error);
-    }
-  };
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Open URL in the in-app browser
   const openInAppBrowser = (url: string) => {
     setBrowserUrl(url);
     setBrowserVisible(true);
   };
+
+  const showNotification = useCallback(
+    (message: string, status: 'success' | 'error', duration = 3000) => {
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+      }
+
+      setNotification({ show: true, message, status });
+
+      notificationTimeoutRef.current = setTimeout(() => {
+        setNotification({ show: false, message: '', status: '' });
+        notificationTimeoutRef.current = null;
+      }, duration);
+    },
+    []
+  );
 
   async function handleLogout() {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -208,7 +222,7 @@ function ProfileScreen() {
       dispatch(logOut());
       router.push({ pathname: '/screens/login' as any });
     } catch (error) {
-      console.error('Logout failed:', error);
+      showNotification('Failed to process authentication callback', 'error');
     }
   }
 
@@ -217,11 +231,11 @@ function ProfileScreen() {
 
   const statsData = [
     {
-      value: '0',
+      value: user?.adsEngaged?.length || '0',
       label: 'Ads engaged',
     },
     {
-      value: '0',
+      value: user?.taskDone || '0',
       label: 'Task done',
     },
     {
@@ -389,6 +403,20 @@ function ProfileScreen() {
             <Ionicons name="log-out-outline" size={24} color="#FFF" />
             <Text style={styles.logoutButtonText}>Logout</Text>
           </TouchableOpacity>
+        )}
+
+        {notification.show && (
+          <Notification
+            status={notification.status}
+            message={notification.message}
+            switchShowOff={() => {
+              setNotification({ show: false, message: '', status: '' });
+              if (notificationTimeoutRef.current) {
+                clearTimeout(notificationTimeoutRef.current);
+                notificationTimeoutRef.current = null;
+              }
+            }}
+          />
         )}
 
         {/* In-App Browser */}

@@ -45,14 +45,14 @@ export default function LoginScreen() {
     show: false,
   });
 
-  console.log('🔍 Rendering RoleSelectionScreen');
+  // console.log('🔍 Rendering RoleSelectionScreen');
 
   useEffect(() => {
-    console.log('🔍 RoleSelectionScreen useEffect running');
+    // console.log('🔍 RoleSelectionScreen useEffect running');
     checkUserAuth();
 
     return () => {
-      console.log('🔍 RoleSelectionScreen useEffect cleanup - component unmounted');
+      // console.log('🔍 RoleSelectionScreen useEffect cleanup - component unmounted');
     };
   }, []);
 
@@ -65,7 +65,7 @@ export default function LoginScreen() {
         router.replace('/screens/home');
       }
     } catch (error) {
-      console.error('Error checking auth state:', error);
+      showNotification('Failed to process authentication callback', 'error');
     }
   }
 
@@ -126,15 +126,12 @@ export default function LoginScreen() {
           // Navigate to home screen
           router.replace('/screens/home');
         } catch (error: any) {
-          console.error('Error saving data to AsyncStorage:', error);
           showNotification(`Storage error: ${error.message}`, 'error');
         }
       } else {
-        console.error('Missing required authentication tokens');
         showNotification('Login failed: Missing authentication tokens', 'error');
       }
     } catch (error: any) {
-      console.error('Error in handleSuccessfulLogin:', error);
       showNotification(`Authentication error: ${error.message}`, 'error');
     }
   }
@@ -148,10 +145,10 @@ export default function LoginScreen() {
       console.log('🔍 Starting Google Sign-In flow');
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
-      console.log('🔍 Google Sign-In successful, user info received');
+      // console.log('🔍 Google Sign-In successful, user info received');
 
       // Log the structure to understand what we're getting back
-      console.log('Google Sign-In response structure:', JSON.stringify(userInfo, null, 2));
+      // console.log('Google Sign-In response structure:', JSON.stringify(userInfo, null, 2));
 
       const photo = userInfo.data?.user.photo;
       await saveDataToAsyncStorage('photo', photo);
@@ -181,7 +178,6 @@ export default function LoginScreen() {
             throw new Error('Invalid server response');
           }
         } catch (apiError: any) {
-          console.error('API Error:', apiError);
           const errorMessage = apiError?.data?.message || 'Server authentication failed';
           showNotification(errorMessage, 'error');
         }
@@ -189,7 +185,7 @@ export default function LoginScreen() {
         showNotification('No authentication token received', 'error');
       }
     } catch (error: any) {
-      console.error('🔍 Google Sign In Error:', error);
+      showNotification('🔍 Google Sign In Error:', error);
 
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         showNotification('Sign-In was cancelled', 'info');
